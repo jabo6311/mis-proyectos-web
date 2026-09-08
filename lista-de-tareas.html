@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Mi Lista de Tareas</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f8;
+            max-width: 500px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+
+        /* Estilo para el campo de texto */
+        #inputTarea {
+            width: 35%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        /* Estilo para el botón de agregar */
+        #botonAgregar {
+            padding: 10px 16px;
+            font-size: 16px;
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #botonAgregar:hover {
+            background-color: #219150;
+        }
+
+        #mensajeError {
+            margin-top: 12px;
+            min-height: 20px;
+            color: #c0392b;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        /* Quitamos las viñetas por defecto de la lista */
+        #listaTareas {
+            list-style: none;
+            padding: 0;
+            margin-top: 20px;
+        }
+
+        /* Estilo para cada tarea individual */
+        #listaTareas li {
+            background-color: white;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        /* Estilo para cuando una tarea está marcada como completada */
+        .completada {
+            text-decoration: line-through;
+            color: #999;
+        }
+
+        /* Estilo para el botón de eliminar (la x) dentro de cada tarea */
+        .btn-eliminar {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Mi Lista de Tareas</h1>
+
+    <!-- El campo de texto donde escribes la tarea -->
+    <input type="text" id="inputTarea" placeholder="Escribe una tarea...">
+
+    <!-- El botón que agrega la tarea a la lista -->
+    <button id="botonAgregar">Agregar</button>
+
+    <p id="mensajeError"></p>
+
+    <!-- Aquí van a aparecer las tareas, por ahora está vacía -->
+    <ul id="listaTareas"></ul>
+
+    <script>
+        // 1. Agarramos los tres elementos que necesitamos controlar
+        const input = document.getElementById("inputTarea");
+        const boton = document.getElementById("botonAgregar");
+        const lista = document.getElementById("listaTareas");
+        const mensaje = document.getElementById("mensajeError");
+
+        function mostrarMensaje(texto) {
+            mensaje.textContent = texto;
+        }
+
+        // 2. Función que agrega una nueva tarea a la lista
+        // El segundo parámetro "completada" es opcional: sirve para cuando
+        // recargamos tareas guardadas que ya estaban marcadas como hechas
+        function agregarTarea(textoGuardado, completadaGuardada) {
+            const texto = textoGuardado !== undefined ? textoGuardado : input.value;
+            const textoNormalizado = texto.trim();
+
+            if (textoNormalizado === "") {
+                return;
+            }
+
+            if (textoGuardado === undefined) {
+                const tareasExistentes = Array.from(lista.querySelectorAll("li span"));
+                const yaExiste = tareasExistentes.some(function(span) {
+                    return span.textContent.trim().toLowerCase() === textoNormalizado.toLowerCase();
+                });
+
+                if (yaExiste) {
+                    mostrarMensaje("La tarea ya existe.");
+                    input.focus();
+                    return;
+                }
+            }
+
+            const li = document.createElement("li");
+
+            const span = document.createElement("span");
+            span.textContent = texto;
+            if (completadaGuardada) {
+                span.classList.add("completada");
+            }
+
+            span.addEventListener("click", function() {
+                span.classList.toggle("completada");
+                guardarTareas(); // cada cambio se guarda de inmediato
+            });
+
+            const botonEliminar = document.createElement("button");
+            botonEliminar.textContent = "X";
+            botonEliminar.classList.add("btn-eliminar");
+
+            botonEliminar.addEventListener("click", function() {
+                li.remove();
+                guardarTareas(); // se actualiza el guardado al eliminar
+            });
+
+            li.appendChild(span);
+            li.appendChild(botonEliminar);
+            lista.appendChild(li);
+
+            input.value = "";
+            mostrarMensaje("");
+
+            // Si vino de un clic real del usuario (no de la carga inicial), guardamos
+            if (textoGuardado === undefined) {
+                guardarTareas();
+                input.focus();
+            }
+        }
+
+        // 5. Recorre todas las tareas actuales en la página y las guarda en localStorage
+        function guardarTareas() {
+            const tareas = [];
+
+            // Recorremos cada <li> que hay actualmente en la lista
+            lista.querySelectorAll("li").forEach(function(li) {
+                const span = li.querySelector("span");
+                tareas.push({
+                    texto: span.textContent,
+                    completada: span.classList.contains("completada")
+                });
+            });
+
+            // Convertimos el array a texto y lo guardamos
+            localStorage.setItem("tareas", JSON.stringify(tareas));
+        }
+
+        // 6. Al cargar la página, revisamos si hay tareas guardadas y las mostramos
+        function cargarTareas() {
+            const guardadas = localStorage.getItem("tareas");
+
+            if (guardadas) {
+                const tareas = JSON.parse(guardadas);
+                tareas.forEach(function(tarea) {
+                    agregarTarea(tarea.texto, tarea.completada);
+                });
+            }
+        }
+
+        // Ejecutamos esto apenas carga la página
+        cargarTareas();
+
+        // 3. Cuando hacen clic en "Agregar", se ejecuta la función
+        // OJO: usamos una función anónima aquí, para evitar que el clic
+        // le pase su propio "objeto de evento" como si fuera el texto de la tarea
+        boton.addEventListener("click", function() {
+            agregarTarea();
+        });
+
+        // 4. Bonus: también funciona si presionas Enter dentro del campo de texto
+        input.addEventListener("keypress", function(evento) {
+            if (evento.key === "Enter") {
+                agregarTarea();
+            }
+        });
+    </script>
+
+</body>
+</html>

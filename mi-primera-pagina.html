@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Esta línea le dice al navegador "esto es HTML5" -->
+<html lang="es">
+<head>
+    <!-- El <head> contiene información sobre la página, no se ve directamente -->
+    <meta charset="UTF-8">
+    <title>Mi primera página</title>
+
+    <style>
+        /* Esto le da estilo a TODA la página */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f4f8;
+            padding: 20px;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        /* Estilo para el título principal */
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+
+        /* Estilo para los subtítulos */
+        h2 {
+            color: #2980b9;
+            border-bottom: 2px solid #2980b9;
+            padding-bottom: 5px;
+        }
+
+        /* Estilo para los párrafos */
+        p {
+            line-height: 1.6;
+            color: #333;
+        }
+
+        /* Estilo para la lista */
+        ul {
+            background-color: white;
+            padding: 20px 40px;
+            border-radius: 8px;
+        }
+
+        /* Estilo para la imagen: bordes redondeados y sombra */
+        img {
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        /* Estilo para el enlace */
+        a {
+            color: #e74c3c;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        /* Esto cambia el color del enlace SOLO cuando pasas el mouse encima */
+        a:hover {
+            text-decoration: underline;
+        }
+
+        /* Estilo para el botón */
+        button {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        /* Esto cambia el botón cuando pasas el mouse encima */
+        button:hover {
+            background-color: #219150;
+        }
+    </style>
+</head>
+<body>
+    <!-- El <body> contiene TODO lo que se ve en la página -->
+
+    <h1>¡Hola, estoy aprendiendo HTML!</h1>
+
+    <p>Este es mi primer párrafo. Aquí puedo escribir lo que quiera.</p>
+
+    <h2>Cosas que me gustan</h2>
+    <ul>
+        <li>Aprender a programar</li>
+        <li>Ver series</li>
+        <li>Tomar café</li>
+    </ul>
+
+    <h2>Una imagen</h2>
+    <img src="https://picsum.photos/300/200" alt="Una imagen de ejemplo">
+
+    <h2>Un enlace</h2>
+    <a href="https://www.google.com">Ir a Google</a>
+
+    <h2>Un botón</h2>
+    <button id="miBoton">Haz clic aquí</button>
+    <p id="mensaje">Todavía no le has dado clic.</p>
+
+    <script>
+        // 1. Creamos una variable para llevar la cuenta de los clics
+        let contador = 0;
+
+        // 2. "Agarramos" el botón y el párrafo por su id, para poder controlarlos
+        const boton = document.getElementById("miBoton");
+        const mensaje = document.getElementById("mensaje");
+
+        // 3. Le decimos al botón: "cuando te hagan clic, ejecuta esta función"
+        boton.addEventListener("click", function() {
+            contador = contador + 1; // sumamos 1 al contador
+            mensaje.textContent = "Le diste clic " + contador + " veces"; // cambiamos el texto del párrafo
+        });
+    </script>
+
+</body>
+</html>
