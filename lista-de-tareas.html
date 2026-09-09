@@ -67,6 +67,20 @@
             justify-content: space-between;
             align-items: center;
             cursor: pointer;
+            border-left: 6px solid #ccc; /* color por defecto */
+        }
+
+        /* Colores según la prioridad, agregados como clase al <li> */
+        .prioridad-alta {
+            border-left-color: #e74c3c; /* rojo */
+        }
+
+        .prioridad-media {
+            border-left-color: #f39c12; /* naranja */
+        }
+
+        .prioridad-baja {
+            border-left-color: #2ecc71; /* verde */
         }
 
         /* Estilo para cuando una tarea está marcada como completada */
@@ -93,31 +107,54 @@
     <!-- El campo de texto donde escribes la tarea -->
     <input type="text" id="inputTarea" placeholder="Escribe una tarea...">
 
+    <!-- Menú para elegir la prioridad de la tarea -->
+    <select id="selectPrioridad">
+        <option value="alta">Alta</option>
+        <option value="media" selected>Media</option>
+        <option value="baja">Baja</option>
+    </select>
+
     <!-- El botón que agrega la tarea a la lista -->
     <button id="botonAgregar">Agregar</button>
 
     <p id="mensajeError"></p>
 
+    <!-- Aquí mostramos cuántas tareas faltan por completar -->
+    <p id="contador">0 tareas pendientes</p>
+
     <!-- Aquí van a aparecer las tareas, por ahora está vacía -->
     <ul id="listaTareas"></ul>
 
     <script>
-        // 1. Agarramos los tres elementos que necesitamos controlar
+        // 1. Agarramos los elementos que necesitamos controlar
         const input = document.getElementById("inputTarea");
+        const selectPrioridad = document.getElementById("selectPrioridad"); // nuevo
         const boton = document.getElementById("botonAgregar");
         const lista = document.getElementById("listaTareas");
         const mensaje = document.getElementById("mensajeError");
+        const contador = document.getElementById("contador"); // nuevo
 
         function mostrarMensaje(texto) {
             mensaje.textContent = texto;
         }
 
+        // 7. Cuenta cuántas tareas NO están completadas y actualiza el texto
+        function actualizarContador() {
+            const todas = lista.querySelectorAll("li").length;
+            const completadas = lista.querySelectorAll("li span.completada").length;
+            const pendientes = todas - completadas;
+
+            contador.textContent = pendientes + " tareas pendientes";
+        }
+
         // 2. Función que agrega una nueva tarea a la lista
         // El segundo parámetro "completada" es opcional: sirve para cuando
         // recargamos tareas guardadas que ya estaban marcadas como hechas
-        function agregarTarea(textoGuardado, completadaGuardada) {
+        function agregarTarea(textoGuardado, completadaGuardada, prioridadGuardada) {
             const texto = textoGuardado !== undefined ? textoGuardado : input.value;
             const textoNormalizado = texto.trim();
+            // Si viene de localStorage usamos su prioridad guardada; si no, la que eligió el usuario ahora
+            const prioridad = prioridadGuardada !== undefined ? prioridadGuardada : selectPrioridad.value;
 
             if (textoNormalizado === "") {
                 return;
@@ -137,6 +174,7 @@
             }
 
             const li = document.createElement("li");
+            li.classList.add("prioridad-" + prioridad); // aplica el color según la prioridad
 
             const span = document.createElement("span");
             span.textContent = texto;
@@ -146,7 +184,8 @@
 
             span.addEventListener("click", function() {
                 span.classList.toggle("completada");
-                guardarTareas(); // cada cambio se guarda de inmediato
+                guardarTareas();
+                actualizarContador();
             });
 
             const botonEliminar = document.createElement("button");
@@ -155,7 +194,8 @@
 
             botonEliminar.addEventListener("click", function() {
                 li.remove();
-                guardarTareas(); // se actualiza el guardado al eliminar
+                guardarTareas();
+                actualizarContador();
             });
 
             li.appendChild(span);
@@ -170,22 +210,28 @@
                 guardarTareas();
                 input.focus();
             }
+
+            actualizarContador();
         }
 
         // 5. Recorre todas las tareas actuales en la página y las guarda en localStorage
         function guardarTareas() {
             const tareas = [];
 
-            // Recorremos cada <li> que hay actualmente en la lista
             lista.querySelectorAll("li").forEach(function(li) {
                 const span = li.querySelector("span");
+                // Buscamos cuál de las tres clases de prioridad tiene este <li>
+                let prioridad = "media";
+                if (li.classList.contains("prioridad-alta")) prioridad = "alta";
+                if (li.classList.contains("prioridad-baja")) prioridad = "baja";
+
                 tareas.push({
                     texto: span.textContent,
-                    completada: span.classList.contains("completada")
+                    completada: span.classList.contains("completada"),
+                    prioridad: prioridad
                 });
             });
 
-            // Convertimos el array a texto y lo guardamos
             localStorage.setItem("tareas", JSON.stringify(tareas));
         }
 
@@ -196,7 +242,7 @@
             if (guardadas) {
                 const tareas = JSON.parse(guardadas);
                 tareas.forEach(function(tarea) {
-                    agregarTarea(tarea.texto, tarea.completada);
+                    agregarTarea(tarea.texto, tarea.completada, tarea.prioridad);
                 });
             }
         }
@@ -205,8 +251,6 @@
         cargarTareas();
 
         // 3. Cuando hacen clic en "Agregar", se ejecuta la función
-        // OJO: usamos una función anónima aquí, para evitar que el clic
-        // le pase su propio "objeto de evento" como si fuera el texto de la tarea
         boton.addEventListener("click", function() {
             agregarTarea();
         });
