@@ -138,6 +138,30 @@
             mensaje.textContent = texto;
         }
 
+        // 8. Reordena las tareas visualmente: Alta primero, luego Media, luego Baja
+        function ordenarPorPrioridad() {
+            // Le asignamos un "peso" numérico a cada prioridad para poder compararlas
+            const peso = { alta: 1, media: 2, baja: 3 };
+
+            // Convertimos los <li> actuales en un array normal (querySelectorAll no trae métodos como sort)
+            const tareas = Array.from(lista.querySelectorAll("li"));
+
+            // Ordenamos ese array comparando el peso de la prioridad de cada uno
+            tareas.sort(function(a, b) {
+                const prioridadA = a.classList.contains("prioridad-alta") ? "alta"
+                                  : a.classList.contains("prioridad-baja") ? "baja" : "media";
+                const prioridadB = b.classList.contains("prioridad-alta") ? "alta"
+                                  : b.classList.contains("prioridad-baja") ? "baja" : "media";
+                return peso[prioridadA] - peso[prioridadB];
+            });
+
+            // Volvemos a insertar cada <li> en el nuevo orden.
+            // appendChild sobre un elemento que YA existe en la página lo MUEVE, no lo duplica.
+            tareas.forEach(function(li) {
+                lista.appendChild(li);
+            });
+        }
+
         // 7. Cuenta cuántas tareas NO están completadas y actualiza el texto
         function actualizarContador() {
             const todas = lista.querySelectorAll("li").length;
@@ -212,6 +236,7 @@
             }
 
             actualizarContador();
+            ordenarPorPrioridad();
         }
 
         // 5. Recorre todas las tareas actuales en la página y las guarda en localStorage
