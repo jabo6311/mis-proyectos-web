@@ -42,6 +42,22 @@
             background-color: #219150;
         }
 
+        #botonBorrarCompletadas {
+            display: block;
+            margin-top: 12px;
+            padding: 8px 14px;
+            font-size: 14px;
+            background-color: #7f8c8d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #botonBorrarCompletadas:hover {
+            background-color: #636e72;
+        }
+
         #mensajeError {
             margin-top: 12px;
             min-height: 20px;
@@ -122,6 +138,9 @@
     <!-- Aquí mostramos cuántas tareas faltan por completar -->
     <p id="contador">0 tareas pendientes</p>
 
+    <!-- Botón para eliminar de golpe todas las tareas ya completadas -->
+    <button id="botonBorrarCompletadas">Borrar completadas</button>
+
     <!-- Aquí van a aparecer las tareas, por ahora está vacía -->
     <ul id="listaTareas"></ul>
 
@@ -132,7 +151,8 @@
         const boton = document.getElementById("botonAgregar");
         const lista = document.getElementById("listaTareas");
         const mensaje = document.getElementById("mensajeError");
-        const contador = document.getElementById("contador"); // nuevo
+        const contador = document.getElementById("contador");
+        const botonBorrarCompletadas = document.getElementById("botonBorrarCompletadas"); // nuevo // nuevo
 
         function mostrarMensaje(texto) {
             mensaje.textContent = texto;
@@ -285,6 +305,19 @@
             if (evento.key === "Enter") {
                 agregarTarea();
             }
+        });
+
+        // 9. Elimina todos los <li> que tengan su span con la clase "completada"
+        botonBorrarCompletadas.addEventListener("click", function() {
+            lista.querySelectorAll("li").forEach(function(li) {
+                const span = li.querySelector("span");
+                if (span.classList.contains("completada")) {
+                    li.remove();
+                }
+            });
+
+            guardarTareas();
+            actualizarContador();
         });
     </script>
 
