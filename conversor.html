@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Conversor de Unidades</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f8;
+            max-width: 450px;
+            margin: 60px auto;
+            padding: 30px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            font-size: 22px;
+        }
+
+        label {
+            display: block;
+            margin-top: 16px;
+            margin-bottom: 6px;
+            font-weight: bold;
+            color: #34495e;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box; /* evita que el padding agrande el ancho total */
+        }
+
+        /* El resultado, destacado */
+        #valorSalida {
+            font-size: 24px;
+            font-weight: bold;
+            color: #27ae60;
+        }
+
+        p {
+            margin-top: 24px;
+            padding: 16px;
+            background-color: #ecf7f1;
+            border-radius: 8px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Conversor de Unidades</h1>
+
+    <!-- Menú para elegir QUÉ tipo de conversión hacer -->
+    <label for="tipoConversion">Tipo de conversión:</label>
+    <select id="tipoConversion">
+        <option value="temperatura">Temperatura (°C ↔ °F)</option>
+        <option value="distancia">Distancia (km ↔ millas)</option>
+        <option value="peso">Peso (kg ↔ libras)</option>
+    </select>
+
+    <br><br>
+
+    <!-- Campo de entrada y su etiqueta, que va a cambiar según el tipo elegido -->
+    <label id="etiquetaEntrada" for="valorEntrada">Celsius:</label>
+    <input type="number" id="valorEntrada" placeholder="Escribe un número">
+
+    <p>
+        <!-- Aquí se muestra el resultado -->
+        <strong id="etiquetaSalida">Fahrenheit:</strong>
+        <span id="valorSalida">0</span>
+    </p>
+
+    <script>
+        // 1. Agarramos todos los elementos que necesitamos controlar
+        const tipoConversion = document.getElementById("tipoConversion");
+        const etiquetaEntrada = document.getElementById("etiquetaEntrada");
+        const etiquetaSalida = document.getElementById("etiquetaSalida");
+        const valorEntrada = document.getElementById("valorEntrada");
+        const valorSalida = document.getElementById("valorSalida");
+
+        // 2. Un objeto que guarda todo lo necesario para cada tipo de conversión:
+        //    las etiquetas a mostrar, y la fórmula como una función
+        const conversiones = {
+            temperatura: {
+                entrada: "Celsius",
+                salida: "Fahrenheit",
+                formula: function(valor) {
+                    return (valor * 9/5) + 32;
+                }
+            },
+            distancia: {
+                entrada: "Kilómetros",
+                salida: "Millas",
+                formula: function(valor) {
+                    return valor * 0.621371;
+                }
+            },
+            peso: {
+                entrada: "Kilogramos",
+                salida: "Libras",
+                formula: function(valor) {
+                    return valor * 2.20462;
+                }
+            }
+        };
+
+        // 3. Actualiza las etiquetas (Celsius:, Kilómetros:, etc.) según el tipo elegido
+        function actualizarEtiquetas() {
+            const tipo = tipoConversion.value; // "temperatura", "distancia" o "peso"
+            const datos = conversiones[tipo];
+
+            etiquetaEntrada.textContent = datos.entrada + ":";
+            etiquetaSalida.textContent = datos.salida + ":";
+        }
+
+        // 4. Lee el número escrito, aplica la fórmula correspondiente, y muestra el resultado
+        function calcular() {
+            const tipo = tipoConversion.value;
+            const datos = conversiones[tipo];
+
+            // Convertimos el texto del input a número. Si está vacío, usamos 0.
+            const valor = parseFloat(valorEntrada.value) || 0;
+
+            const resultado = datos.formula(valor);
+
+            // toFixed(2) redondea a 2 decimales, para no mostrar números eternos
+            valorSalida.textContent = resultado.toFixed(2);
+        }
+
+        // 5. Cuando cambias el tipo de conversión: actualizamos etiquetas Y recalculamos
+        tipoConversion.addEventListener("change", function() {
+            actualizarEtiquetas();
+            calcular();
+        });
+
+        // 6. Cada vez que escribes algo en el campo, recalculamos al instante
+        //    "input" se dispara con CADA tecla, a diferencia de "change" que espera a que pierdas el foco
+        valorEntrada.addEventListener("input", calcular);
+    </script>
+
+</body>
+</html>
