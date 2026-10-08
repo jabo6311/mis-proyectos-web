@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Calculadora</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #2c3e50;
+            display: flex;
+            justify-content: center;
+            padding-top: 60px;
+        }
+
+        /* La caja completa de la calculadora */
+        #calculadora {
+            width: 300px;
+            background-color: #1e272e;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+
+        /* La pantalla */
+        #pantalla {
+            background-color: #0b1215;
+            color: white;
+            font-size: 36px;
+            text-align: right;
+            padding: 20px 14px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            min-height: 44px;
+            overflow-x: auto;    /* si el número es muy largo, permite desplazarlo */
+            white-space: nowrap; /* evita que el número salte de línea */
+        }
+
+        /* Aquí está la magia: CSS Grid */
+        #botones {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr); /* 4 columnas del mismo ancho */
+            gap: 10px;                             /* espacio entre botones */
+        }
+
+        button {
+            padding: 18px 0;
+            font-size: 20px;
+            border: none;
+            border-radius: 8px;
+            background-color: #485460;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #5f6e7c;
+        }
+
+        /* Los operadores (÷ × − +) en naranja */
+        button[data-valor="/"],
+        button[data-valor="*"],
+        button[data-valor="-"],
+        button[data-valor="+"] {
+            background-color: #f39c12;
+        }
+
+        /* Los botones C y ⌫ en rojo suave */
+        button[data-accion="limpiar"],
+        button[data-accion="borrar"] {
+            background-color: #c0392b;
+        }
+
+        /* El botón = en verde, ocupando DOS filas de alto */
+        .igual {
+            background-color: #27ae60;
+            grid-row: span 2;
+        }
+
+        /* El 0 ocupa DOS columnas, como en una calculadora real */
+        .cero {
+            grid-column: span 2;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="calculadora">
+
+        <!-- La pantalla donde se ven los números -->
+        <div id="pantalla">0</div>
+
+        <!-- Contenedor de todos los botones -->
+        <div id="botones">
+            <!-- data-accion: botones con una función especial -->
+            <button data-accion="limpiar">C</button>
+            <button data-accion="borrar">⌫</button>
+            <!-- data-valor: botones que agregan algo a la pantalla -->
+            <button data-valor="/">÷</button>
+            <button data-valor="*">×</button>
+
+            <button data-valor="7">7</button>
+            <button data-valor="8">8</button>
+            <button data-valor="9">9</button>
+            <button data-valor="-">−</button>
+
+            <button data-valor="4">4</button>
+            <button data-valor="5">5</button>
+            <button data-valor="6">6</button>
+            <button data-valor="+">+</button>
+
+            <button data-valor="1">1</button>
+            <button data-valor="2">2</button>
+            <button data-valor="3">3</button>
+            <button data-accion="igual" class="igual">=</button>
+
+            <button data-valor="0" class="cero">0</button>
+            <button data-valor=".">.</button>
+        </div>
+
+    </div>
+
+    <script>
+        // 1. Elementos que necesitamos
+        const pantalla = document.getElementById("pantalla");
+        const botones = document.getElementById("botones");
+
+        // 2. El "estado" de la calculadora: lo que necesita recordar entre clics
+        let numeroActual = "0";           // el número que se está escribiendo (como texto)
+        let valorAnterior = null;         // el primer número, guardado al elegir un operador
+        let operador = null;              // "+", "-", "*" o "/" (o null si no hay ninguno)
+        let esperandoNuevoNumero = false; // true justo después de elegir un operador o dar "="
+
+        // 3. Muestra el número actual en la pantalla
+        function actualizarPantalla() {
+            pantalla.textContent = numeroActual;
+        }
+
+        // 4. Se ejecuta al pulsar un dígito (0-9)
+        function agregarDigito(digito) {
+            if (esperandoNuevoNumero) {
+                numeroActual = digito;         // empezamos un número nuevo
+                esperandoNuevoNumero = false;
+            } else {
+                // Si estaba en "0", lo reemplazamos (para no tener "07"); si no, lo agregamos al final
+                numeroActual = numeroActual === "0" ? digito : numeroActual + digito;
+            }
+        }
+
+        // 5. Se ejecuta al pulsar el punto decimal
+        function agregarPunto() {
+            if (esperandoNuevoNumero) {
+                numeroActual = "0.";
+                esperandoNuevoNumero = false;
+            } else if (!numeroActual.includes(".")) {
+                numeroActual = numeroActual + "."; // solo permitimos un punto por número
+            }
+        }
+
+        // 6. Hace la operación matemática entre dos números
+        function operar(a, b, signo) {
+            if (signo === "+") return a + b;
+            if (signo === "-") return a - b;
+            if (signo === "*") return a * b;
+            if (signo === "/") return b === 0 ? null : a / b; // null = división entre cero
+        }
+
+        // 7. Calcula el resultado pendiente (si lo hay) y lo deja en pantalla
+        function calcular() {
+            if (operador === null || esperandoNuevoNumero) {
+                return; // no hay nada que calcular todavía
+            }
+
+            const resultado = operar(valorAnterior, parseFloat(numeroActual), operador);
+
+            if (resultado === null) {
+                numeroActual = "Error";
+            } else {
+                // Number(x.toFixed(10)) elimina errores de decimales como 0.1 + 0.2 = 0.30000000000000004
+                numeroActual = String(Number(resultado.toFixed(10)));
+            }
+
+            valorAnterior = null;
+            operador = null;
+            esperandoNuevoNumero = true;
+        }
+
+        // 8. Se ejecuta al pulsar un operador (+ - × ÷)
+        function elegirOperador(signo) {
+            if (numeroActual === "Error") {
+                return;
+            }
+
+            // Si ya había una operación pendiente (ej: 2 + 3 y ahora pulsas ×), la resolvemos primero
+            if (operador !== null && !esperandoNuevoNumero) {
+                calcular();
+                if (numeroActual === "Error") {
+                    return;
+                }
+            }
+
+            valorAnterior = parseFloat(numeroActual);
+            operador = signo;
+            esperandoNuevoNumero = true;
+        }
+
+        // 9. Botón C: reinicia todo
+        function limpiar() {
+            numeroActual = "0";
+            valorAnterior = null;
+            operador = null;
+            esperandoNuevoNumero = false;
+        }
+
+        // 10. Botón ⌫: borra el último dígito
+        function borrar() {
+            if (esperandoNuevoNumero || numeroActual === "Error") {
+                return;
+            }
+            numeroActual = numeroActual.slice(0, -1);
+            if (numeroActual === "" || numeroActual === "-") {
+                numeroActual = "0";
+            }
+        }
+
+        // 11. UN solo listener para TODOS los botones.
+        //     Escuchamos los clics en el contenedor y descubrimos cuál botón fue.
+        botones.addEventListener("click", function(evento) {
+            const boton = evento.target.closest("button");
+            if (!boton) {
+                return; // el clic fue en un espacio entre botones
+            }
+
+            const valor = boton.dataset.valor;   // lee data-valor
+            const accion = boton.dataset.accion; // lee data-accion
+
+            // Si la pantalla muestra "Error", cualquier número nuevo la reemplaza
+            if (numeroActual === "Error" && valor !== undefined) {
+                limpiar();
+            }
+
+            if (accion === "limpiar") {
+                limpiar();
+            } else if (accion === "borrar") {
+                borrar();
+            } else if (accion === "igual") {
+                calcular();
+            } else if (valor === ".") {
+                agregarPunto();
+            } else if (["+", "-", "*", "/"].includes(valor)) {
+                elegirOperador(valor);
+            } else {
+                agregarDigito(valor); // lo que queda son los dígitos 0-9
+            }
+
+            actualizarPantalla();
+        });
+    </script>
+
+</body>
+</html>
