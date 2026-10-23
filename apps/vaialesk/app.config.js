@@ -34,9 +34,12 @@ export default {
       }
     },
     extra: {
+      // Keep the native build's capability in the manifest used by Metro too.
+      androidMapsConfigured: Boolean(process.env.GOOGLE_MAPS_API_KEY?.trim()),
       eas: {
         projectId: "fcf4ec62-e9cb-44d5-aa9b-0ade8d3f2641"
       }
     }
   }
 };
+
