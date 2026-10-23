@@ -112,6 +112,11 @@ instala un APK nuevo; reiniciar Metro no modifica un APK ya instalado.
 
 ### Cliente de desarrollo (requiere Metro)
 
+En los perfiles `preview` y `development`, si `EXPO_PUBLIC_API_URL` usa HTTP,
+el APK permite tráfico sin TLS únicamente al host del API mediante una
+configuración de seguridad de red de Android. El resto de hosts siguen
+requiriendo HTTPS. Esta excepción no se activa para el perfil `production`.
+
 Desde esta carpeta:
 
 ```bash

@@ -7,6 +7,13 @@ export default {
     orientation: "portrait",
     userInterfaceStyle: "light",
     plugins: [
+      [
+        "./plugins/with-android-test-api",
+        {
+          apiUrl: process.env.EXPO_PUBLIC_API_URL,
+          buildProfile: process.env.EAS_BUILD_PROFILE || "development"
+        }
+      ],
       "expo-status-bar",
       [
         "react-native-auth0",
