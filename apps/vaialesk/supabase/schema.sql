@@ -11,7 +11,8 @@ create type public.ride_status as enum (
 );
 
 create table public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),
+  auth0_sub text not null unique,
   full_name text not null default '',
   role public.user_role not null default 'passenger',
   driver_status public.driver_review_status not null default 'pending',
@@ -54,23 +55,6 @@ create table public.support_requests (
   created_at timestamptz not null default now()
 );
 
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = ''
-as $$
-begin
-  insert into public.profiles (id, full_name, role)
-  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name', ''), 'passenger');
-  return new;
-end;
-$$;
-
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
-
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -93,7 +77,21 @@ stable
 security definer
 set search_path = ''
 as $$
-  select role from public.profiles where id = (select auth.uid())
+  select role
+  from public.profiles
+  where auth0_sub = (select auth.jwt() ->> 'sub')
+$$;
+
+create or replace function public.current_user_profile_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select id
+  from public.profiles
+  where auth0_sub = (select auth.jwt() ->> 'sub')
 $$;
 
 alter table public.profiles enable row level security;
@@ -103,7 +101,7 @@ alter table public.support_requests enable row level security;
 
 create policy "Users can read own profile"
   on public.profiles for select to authenticated
-  using (id = (select auth.uid()));
+  using (auth0_sub = (select auth.jwt() ->> 'sub'));
 
 create policy "Approved drivers are visible to admins"
   on public.profiles for select to authenticated
@@ -112,8 +110,8 @@ create policy "Approved drivers are visible to admins"
 create policy "Users can read their rides"
   on public.rides for select to authenticated
   using (
-    passenger_id = (select auth.uid())
-    or driver_id = (select auth.uid())
+    passenger_id = public.current_user_profile_id()
+    or driver_id = public.current_user_profile_id()
     or public.current_user_role() = 'admin'
   );
 
@@ -124,22 +122,22 @@ create policy "Approved drivers can read available rides"
     and public.current_user_role() = 'driver'
     and exists (
       select 1 from public.profiles
-      where id = (select auth.uid()) and driver_status = 'approved'
+      where id = public.current_user_profile_id() and driver_status = 'approved'
     )
   );
 
 create policy "Ride participants and admins can read ratings"
   on public.ratings for select to authenticated
   using (
-    passenger_id = (select auth.uid())
-    or driver_id = (select auth.uid())
+    passenger_id = public.current_user_profile_id()
+    or driver_id = public.current_user_profile_id()
     or public.current_user_role() = 'admin'
   );
 
 create policy "Users can read their support requests"
   on public.support_requests for select to authenticated
   using (
-    user_id = (select auth.uid())
+    user_id = public.current_user_profile_id()
     or public.current_user_role() = 'admin'
   );
 

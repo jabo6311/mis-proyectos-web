@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,13 +10,21 @@ import {
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
+import { Auth0Provider, useAuth0 } from "react-native-auth0";
 import { createClient } from "@supabase/supabase-js";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
+const auth0Domain = process.env.EXPO_PUBLIC_AUTH0_DOMAIN;
+const auth0ClientId = process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID;
+const auth0Audience = process.env.EXPO_PUBLIC_AUTH0_AUDIENCE;
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-const apiUrl = process.env.EXPO_PUBLIC_API_URL;
-const supabase =
-  supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+const apiUrl = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
+const googleConnection =
+  process.env.EXPO_PUBLIC_AUTH0_GOOGLE_CONNECTION || "google-oauth2";
+const microsoftConnection =
+  process.env.EXPO_PUBLIC_AUTH0_MICROSOFT_CONNECTION || "windowslive";
+const customScheme = "vaialesk";
 
 const initialRegion = {
   latitude: 4.6533,
@@ -40,22 +48,166 @@ const rideLabels = {
 };
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      {!auth0Domain || !auth0ClientId || !auth0Audience || !apiUrl ? (
+        <ConfigurationScreen />
+      ) : (
+        <Auth0Provider
+          domain={auth0Domain}
+          clientId={auth0ClientId}
+          useDPoP={false}
+        >
+          <AuthenticatedApp />
+        </Auth0Provider>
+      )}
+    </SafeAreaProvider>
+  );
+}
+
+function AuthenticatedApp() {
+  const { authorize, clearSession, getCredentials, isLoading, user } = useAuth0();
+  const [profile, setProfile] = useState(null);
+  const [profileError, setProfileError] = useState("");
+  const [profileLoading, setProfileLoading] = useState(false);
   const [role, setRole] = useState("passenger");
   const [ride, setRide] = useState(null);
   const [isOnline, setIsOnline] = useState(false);
-  const [driverSubmitted, setDriverSubmitted] = useState(false);
-  const [driverApproved, setDriverApproved] = useState(false);
+  const [availableRides, setAvailableRides] = useState([]);
+  const [pendingDrivers, setPendingDrivers] = useState([]);
+  const [adminRides, setAdminRides] = useState([]);
   const [rating, setRating] = useState(0);
   const [live, setLive] = useState(false);
+  const supabase = useMemo(() => {
+    if (!user || !supabaseUrl || !supabaseKey) return null;
+    return createClient(supabaseUrl, supabaseKey, {
+      accessToken: async () => {
+        const credentials = await getCredentials();
+        return credentials.idToken;
+      }
+    });
+  }, [getCredentials, user?.sub]);
+
+  const apiRequest = useCallback(
+    async (path, options = {}) => {
+      if (!apiUrl || !auth0Audience) {
+        throw new Error("Configura la URL del API y el audience de Auth0.");
+      }
+      const credentials = await getCredentials();
+      const response = await fetch(`${apiUrl}${path}`, {
+        ...options,
+        headers: {
+          ...(options.body ? { "Content-Type": "application/json" } : {}),
+          Authorization: `Bearer ${credentials.accessToken}`,
+          ...options.headers
+        }
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "No se pudo completar la solicitud.");
+      return body;
+    },
+    [getCredentials]
+  );
+
+  const refreshProfile = useCallback(async () => {
+    const result = await apiRequest("/api/me");
+    setProfile(result.profile);
+    setRole(result.profile.role === "admin" ? "admin" : result.profile.role);
+    return result.profile;
+  }, [apiRequest]);
+
+  const retryProfile = async () => {
+    setProfileLoading(true);
+    setProfileError("");
+    try {
+      await refreshProfile();
+    } catch (error) {
+      setProfileError(error.message);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!supabase || !ride?.id) {
+    if (!user) {
+      setProfile(null);
+      setRide(null);
+      setProfileError("");
+      return undefined;
+    }
+    let mounted = true;
+    setProfileLoading(true);
+    setProfileError("");
+    apiRequest("/api/me")
+      .then(({ profile: currentProfile }) => {
+        if (!mounted) return;
+        setProfile(currentProfile);
+        setRole(currentProfile.role === "admin" ? "admin" : currentProfile.role);
+      })
+      .catch((error) => {
+        if (mounted) setProfileError(error.message);
+      })
+      .finally(() => {
+        if (mounted) setProfileLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [apiRequest, user?.sub]);
+
+  useEffect(() => {
+    if (!profile?.id) return undefined;
+    let active = true;
+    apiRequest("/api/rides/current")
+      .then(({ ride: currentRide }) => {
+        if (active) setRide(currentRide);
+      })
+      .catch((error) => {
+        if (active) Alert.alert("No se pudo cargar el viaje", error.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiRequest, profile?.id]);
+
+  useEffect(() => {
+    if (profile?.role !== "driver" || profile.driver_status === "approved") {
+      return undefined;
+    }
+    let active = true;
+    const refreshDriverStatus = async () => {
+      try {
+        const result = await apiRequest("/api/me");
+        if (active) setProfile(result.profile);
+      } catch (error) {
+        if (active) console.error("No se pudo actualizar la verificación:", error);
+      }
+    };
+    const polling = setInterval(refreshDriverStatus, 10000);
+    return () => {
+      active = false;
+      clearInterval(polling);
+    };
+  }, [apiRequest, profile?.driver_status, profile?.role]);
+
+  useEffect(() => {
+    if (!ride?.id) {
       setLive(false);
       return undefined;
     }
 
+    let active = true;
+    const refreshRide = async () => {
+      try {
+        const result = await apiRequest(`/api/rides/${ride.id}`);
+        if (active) setRide(result.ride);
+      } catch (error) {
+        if (active) console.error("No se pudo actualizar el viaje:", error);
+      }
+    };
+    const polling = setInterval(refreshRide, 5000);
     const channel = supabase
-      .channel(`ride-${ride.id}`)
+      ?.channel(`ride-${ride.id}`)
       .on(
         "postgres_changes",
         {
@@ -69,9 +221,94 @@ export default function App() {
       .subscribe((status) => setLive(status === "SUBSCRIBED"));
 
     return () => {
-      supabase.removeChannel(channel);
+      active = false;
+      clearInterval(polling);
+      if (channel) supabase.removeChannel(channel);
     };
-  }, [ride?.id]);
+  }, [apiRequest, ride?.id, supabase]);
+
+  useEffect(() => {
+    if (
+      role !== "driver" ||
+      profile?.driver_status !== "approved" ||
+      !isOnline ||
+      ride?.id
+    ) {
+      setAvailableRides([]);
+      return undefined;
+    }
+    let active = true;
+    const loadAvailableRides = async () => {
+      try {
+        const result = await apiRequest("/api/rides/available");
+        if (active) setAvailableRides(result.rides);
+      } catch (error) {
+        if (active) console.error("No se pudieron cargar los viajes:", error);
+      }
+    };
+    loadAvailableRides();
+    const polling = setInterval(loadAvailableRides, 5000);
+    return () => {
+      active = false;
+      clearInterval(polling);
+    };
+  }, [apiRequest, isOnline, profile?.driver_status, role, ride?.id]);
+
+  useEffect(() => {
+    if (role !== "admin") {
+      setPendingDrivers([]);
+      setAdminRides([]);
+      return undefined;
+    }
+    let active = true;
+    const refreshAdminData = async () => {
+      try {
+        const [driversResult, ridesResult] = await Promise.all([
+          apiRequest("/api/admin/drivers/pending"),
+          apiRequest("/api/admin/rides")
+        ]);
+        if (!active) return;
+        setPendingDrivers(driversResult.drivers);
+        setAdminRides(ridesResult.rides);
+      } catch (error) {
+        if (active) console.error("No se pudo actualizar el panel:", error);
+      }
+    };
+    refreshAdminData();
+    const polling = setInterval(refreshAdminData, 10000);
+    return () => {
+      active = false;
+      clearInterval(polling);
+    };
+  }, [apiRequest, role]);
+
+  const signIn = async (connection) => {
+    try {
+      await authorize(
+        {
+          audience: auth0Audience,
+          scope: "openid profile email offline_access",
+          connection
+        },
+        { customScheme }
+      );
+    } catch (error) {
+      if (error.code !== "a0.session_cancelled") {
+        Alert.alert("No se pudo iniciar sesión", error.message);
+      }
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      await clearSession({}, { customScheme });
+      setProfile(null);
+      setRole("passenger");
+      setRide(null);
+    } catch (error) {
+      Alert.alert("No se pudo cerrar sesión", error.message);
+    }
+  };
 
   const requestRide = async () => {
     const draft = {
@@ -84,84 +321,100 @@ export default function App() {
       payment_method: "cash"
     };
 
-    if (apiUrl && supabase) {
-      const {
-        data: { session }
-      } = await supabase.auth.getSession();
-      if (!session) {
-        Alert.alert("Inicia sesión", "Configura autenticación para pedir viajes.");
-        return;
-      }
-      try {
-        const response = await fetch(`${apiUrl}/api/rides`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`
-          },
-          body: JSON.stringify(draft)
-        });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "No se pudo pedir el viaje.");
-        setRide(body.ride);
-      } catch (error) {
-        Alert.alert("No se pudo pedir el viaje", error.message);
-      }
-      return;
+    try {
+      const result = await apiRequest("/api/rides", {
+        method: "POST",
+        body: JSON.stringify(draft)
+      });
+      setRide(result.ride);
+      setRating(0);
+    } catch (error) {
+      Alert.alert("No se pudo pedir el viaje", error.message);
     }
-
-    setRide({
-      ...draft,
-      id: `demo-${Date.now()}`,
-      status: "searching",
-      estimated_fare: 28500,
-      driver_name: null
-    });
-    setRating(0);
   };
 
-  const acceptRide = async () => {
-    if (!ride) return;
-    if (apiUrl && supabase && !ride.id.startsWith("demo-")) {
-      const {
-        data: { session }
-      } = await supabase.auth.getSession();
-      try {
-        const response = await fetch(`${apiUrl}/api/rides/${ride.id}/accept`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${session?.access_token}` }
-        });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "No se pudo aceptar.");
-        setRide(body.ride);
-      } catch (error) {
-        Alert.alert("No se pudo aceptar el viaje", error.message);
-      }
-      return;
+  const acceptRide = async (rideToAccept = ride) => {
+    if (!rideToAccept) return;
+    try {
+      const result = await apiRequest(`/api/rides/${rideToAccept.id}/accept`, {
+        method: "POST"
+      });
+      setRide(result.ride);
+      setAvailableRides([]);
+    } catch (error) {
+      Alert.alert("No se pudo aceptar el viaje", error.message);
     }
-    setRide({ ...ride, status: "accepted", driver_name: "Camila R." });
   };
 
-  const advanceRide = () => {
+  const updateRideStatus = async (status) => {
     if (!ride) return;
-    const nextStatus = ride.status === "accepted" ? "in_progress" : "completed";
-    setRide({ ...ride, status: nextStatus });
+    try {
+      const result = await apiRequest(`/api/rides/${ride.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status })
+      });
+      setRide(result.ride);
+    } catch (error) {
+      Alert.alert("No se pudo actualizar el viaje", error.message);
+    }
+  };
+
+  const applyAsDriver = async () => {
+    try {
+      const result = await apiRequest("/api/drivers/application", {
+        method: "POST"
+      });
+      setProfile(result.profile);
+      setRole("driver");
+    } catch (error) {
+      Alert.alert("No se pudo enviar la solicitud", error.message);
+    }
+  };
+
+  const approveDriver = async (driverId) => {
+    try {
+      await apiRequest(`/api/admin/drivers/${driverId}/approval`, {
+        method: "PATCH",
+        body: JSON.stringify({ approved: true })
+      });
+      const [driversResult, ridesResult] = await Promise.all([
+        apiRequest("/api/admin/drivers/pending"),
+        apiRequest("/api/admin/rides")
+      ]);
+      setPendingDrivers(driversResult.drivers);
+      setAdminRides(ridesResult.rides);
+    } catch (error) {
+      Alert.alert("No se pudo aprobar al conductor", error.message);
+    }
+  };
+
+  const submitRating = async (score) => {
+    if (!ride) return;
+    try {
+      await apiRequest(`/api/rides/${ride.id}/rating`, {
+        method: "POST",
+        body: JSON.stringify({ score })
+      });
+      setRating(score);
+    } catch (error) {
+      Alert.alert("No se pudo guardar la calificación", error.message);
+    }
   };
 
   const shareRide = () =>
     Alert.alert(
       "Comparte tu viaje",
-      `Código de seguimiento: VAI-${String(ride?.id || "DEMO").slice(-6).toUpperCase()}`
+      `Código de seguimiento: VAI-${String(ride?.id || "VIAJE").slice(-6).toUpperCase()}`
     );
 
   const sendSos = () =>
     Alert.alert(
       "Alerta SOS",
-      "Se notificará a tus contactos de emergencia y al equipo de soporte."
+      "La alerta SOS aún no está conectada a un servicio de emergencia."
     );
 
   const driverCanGoOnline = () => {
-    if (!driverApproved) {
+    if (profile?.driver_status !== "approved") {
       Alert.alert(
         "Verificación pendiente",
         "El equipo de Vaialesk debe aprobar tus documentos antes de conectarte."
@@ -171,10 +424,25 @@ export default function App() {
     setIsOnline(!isOnline);
   };
 
-  const completeRide = () => {
-    if (!ride) return;
-    setRide({ ...ride, status: "completed" });
-  };
+  if (isLoading || (user && (profileLoading || (!profile && !profileError)))) {
+    return <LoadingScreen />;
+  }
+  if (!user) {
+    return <LoginScreen onSignIn={signIn} />;
+  }
+  if (profileError) {
+    return (
+      <ErrorScreen
+        message={profileError}
+        onRetry={retryProfile}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  const driverApproved = profile?.driver_status === "approved";
+  const driverSubmitted = profile?.role === "driver" && !driverApproved;
+  const primaryAvailableRide = availableRides[0] || null;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -184,38 +452,60 @@ export default function App() {
           <Text style={styles.brand}>vaialesk</Text>
           <Text style={styles.brandSub}>MUÉVETE A TU MANERA</Text>
         </View>
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Botón de emergencia"
-          style={styles.sosButton}
-          onPress={sendSos}
-        >
-          <Text style={styles.sosText}>SOS</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.roleSwitch}>
-        {Object.entries(roleLabels).map(([key, label]) => (
+        <View style={styles.headerActions}>
           <TouchableOpacity
-            key={key}
-            style={[styles.roleButton, role === key && styles.roleButtonActive]}
-            onPress={() => setRole(key)}
             accessibilityRole="button"
-            accessibilityState={{ selected: role === key }}
+            accessibilityLabel="Botón de emergencia"
+            style={styles.sosButton}
+            onPress={sendSos}
           >
-            <Text style={[styles.roleText, role === key && styles.roleTextActive]}>
-              {label}
+            <Text style={styles.sosText}>SOS</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar sesión"
+            style={styles.profileButton}
+            onPress={signOut}
+          >
+            <Text style={styles.profileButtonText}>
+              {(profile?.full_name || user.name || "U").slice(0, 1).toUpperCase()} · Salir
             </Text>
           </TouchableOpacity>
-        ))}
+        </View>
       </View>
+
+      {profile?.role === "passenger" ? (
+        <View style={styles.roleSwitch}>
+          <Text style={[styles.roleButton, styles.roleButtonActive, styles.roleTextActive]}>
+            Pasajero
+          </Text>
+          <TouchableOpacity
+            style={styles.roleButton}
+            onPress={applyAsDriver}
+            accessibilityRole="button"
+          >
+            <Text style={styles.roleText}>Quiero conducir</Text>
+          </TouchableOpacity>
+        </View>
+      ) : profile?.role === "driver" ? (
+        <View style={styles.roleSwitch}>
+          <Text style={[styles.roleButton, styles.roleButtonActive, styles.roleTextActive]}>
+            {roleLabels.driver}
+          </Text>
+        </View>
+      ) : (
+        <View style={[styles.roleSwitch, styles.adminMode]}>
+          <Text style={[styles.roleButton, styles.roleButtonActive, styles.roleTextActive]}>
+            {roleLabels[profile.role] || "Admin"}
+          </Text>
+        </View>
+      )}
 
       {role === "admin" ? (
         <AdminView
-          driverApproved={driverApproved}
-          driverSubmitted={driverSubmitted}
-          onApprove={() => setDriverApproved(true)}
-          ride={ride}
+          pendingDrivers={pendingDrivers}
+          rides={adminRides}
+          onApprove={approveDriver}
         />
       ) : (
         <>
@@ -227,23 +517,23 @@ export default function App() {
               showsMyLocationButton
             >
               <Marker
-                coordinate={{ latitude: 4.6767, longitude: -74.0486 }}
+                coordinate={{ latitude: ride?.pickup_lat || 4.6767, longitude: ride?.pickup_lng || -74.0486 }}
                 title={ride?.pickup_address || "Tu ubicación"}
                 pinColor="#19a777"
               />
               {ride && (
                 <>
                   <Marker
-                    coordinate={{ latitude: 4.7016, longitude: -74.1469 }}
+                    coordinate={{ latitude: ride.destination_lat, longitude: ride.destination_lng }}
                     title={ride.destination_address}
                     pinColor="#f07354"
                   />
                   <Polyline
                     coordinates={[
-                      { latitude: 4.6767, longitude: -74.0486 },
+                      { latitude: ride.pickup_lat, longitude: ride.pickup_lng },
                       { latitude: 4.681, longitude: -74.073 },
                       { latitude: 4.67, longitude: -74.105 },
-                      { latitude: 4.7016, longitude: -74.1469 }
+                      { latitude: ride.destination_lat, longitude: ride.destination_lng }
                     ]}
                     strokeColor="#19a777"
                     strokeWidth={4}
@@ -270,30 +560,100 @@ export default function App() {
             <PassengerView
               ride={ride}
               rating={rating}
-              onRate={setRating}
+              onRate={submitRating}
               onRequest={requestRide}
               onShare={shareRide}
             />
           ) : (
             <DriverView
               ride={ride}
+              availableRide={primaryAvailableRide}
               approved={driverApproved}
               submitted={driverSubmitted}
               online={isOnline}
               onToggleOnline={driverCanGoOnline}
-              onSubmit={() => setDriverSubmitted(true)}
               onAccept={acceptRide}
-              onAdvance={advanceRide}
-              onComplete={completeRide}
+              onAdvance={() => updateRideStatus("in_progress")}
+              onComplete={() => updateRideStatus("completed")}
             />
           )}
         </>
       )}
       <Text style={styles.demoNote}>
-        {supabase && apiUrl
-          ? "Supabase configurado · autenticación pendiente"
-          : "Vista de demostración · conecta Supabase para datos en vivo"}
+        {supabase
+          ? "Conectado a Auth0 · seguimiento en tiempo real"
+          : "Conectado a Auth0 · seguimiento con actualización periódica"}
       </Text>
+    </SafeAreaView>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <SafeAreaView style={styles.authScreen}>
+      <ActivityIndicator size="large" color="#1a7758" />
+      <Text style={styles.authSubtitle}>Cargando tu cuenta...</Text>
+    </SafeAreaView>
+  );
+}
+
+function LoginScreen({ onSignIn }) {
+  return (
+    <SafeAreaView style={styles.authScreen}>
+      <ExpoStatusBar style="dark" />
+      <View style={styles.loginCard}>
+        <Text style={styles.brand}>vaialesk</Text>
+        <Text style={styles.brandSub}>MUÉVETE A TU MANERA</Text>
+        <Text style={styles.loginTitle}>Tu ciudad, más cerca.</Text>
+        <Text style={styles.authSubtitle}>
+          Inicia sesión de forma segura para pedir o conducir un viaje.
+        </Text>
+        <PrimaryButton
+          label="Continuar con Google"
+          onPress={() => onSignIn(googleConnection)}
+        />
+        <TouchableOpacity
+          accessibilityRole="button"
+          style={styles.microsoftButton}
+          onPress={() => onSignIn(microsoftConnection)}
+        >
+          <Text style={styles.microsoftButtonText}>Continuar con Microsoft</Text>
+        </TouchableOpacity>
+        <Text style={styles.loginFootnote}>
+          Inicio de sesión seguro con Auth0 · Pago en efectivo
+        </Text>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function ConfigurationScreen() {
+  return (
+    <SafeAreaView style={styles.authScreen}>
+      <View style={styles.loginCard}>
+        <Text style={styles.brand}>vaialesk</Text>
+        <Text style={styles.loginTitle}>Configura Auth0</Text>
+        <Text style={styles.authSubtitle}>
+          Configura el dominio, Client ID, audience de Auth0 y la URL del API en
+          apps/vaialesk/.env. Después crea un development build: Expo Go no
+          admite este SDK de autenticación.
+        </Text>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function ErrorScreen({ message, onRetry, onSignOut }) {
+  return (
+    <SafeAreaView style={styles.authScreen}>
+      <View style={styles.loginCard}>
+        <Text style={styles.loginTitle}>No pudimos cargar tu perfil</Text>
+        <Text style={styles.authSubtitle}>{message}</Text>
+        <PrimaryButton label="Reintentar" onPress={onRetry} />
+        <TouchableOpacity style={styles.microsoftButton} onPress={onSignOut}>
+          <Text style={styles.microsoftButtonText}>Cerrar sesión</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -392,11 +752,11 @@ function PassengerView({ ride, rating, onRate, onRequest, onShare }) {
 
 function DriverView({
   ride,
+  availableRide,
   approved,
   submitted,
   online,
   onToggleOnline,
-  onSubmit,
   onAccept,
   onAdvance,
   onComplete
@@ -420,10 +780,9 @@ function DriverView({
             <Text style={styles.pending}>{submitted ? "EN REVISIÓN" : "PENDIENTE"}</Text>
           </View>
           {!submitted && (
-            <>
-              <PrimaryButton label="Enviar documentos" onPress={onSubmit} />
-              <Text style={styles.helperText}>Demo: envía una solicitud de aprobación</Text>
-            </>
+            <Text style={styles.helperText}>
+              Solicitud registrada · soporte te indicará cómo verificar tus documentos
+            </Text>
           )}
         </>
       ) : (
@@ -438,18 +797,7 @@ function DriverView({
               <Text style={styles.ridesLabel}>viajes</Text>
             </View>
           </View>
-          {ride?.status === "searching" ? (
-            <View style={styles.requestCard}>
-              <View style={styles.requestTop}>
-                <Text style={styles.newRide}>NUEVA SOLICITUD</Text>
-                <Text style={styles.requestTime}>2 min · 4.8 km</Text>
-              </View>
-              <Text style={styles.requestTitle}>Parque de la 93 → El Dorado</Text>
-              <Text style={styles.requestDetail}>Pasajero verificado · Pago en efectivo</Text>
-              <Text style={styles.requestFare}>$28.500</Text>
-              <PrimaryButton label="Aceptar viaje" onPress={onAccept} />
-            </View>
-          ) : ride?.status === "accepted" || ride?.status === "in_progress" ? (
+          {ride?.status === "accepted" || ride?.status === "in_progress" ? (
             <View style={styles.requestCard}>
               <Text style={styles.newRide}>{rideLabels[ride.status]}</Text>
               <Text style={styles.requestTitle}>{ride.destination_address}</Text>
@@ -457,6 +805,21 @@ function DriverView({
                 label={ride.status === "accepted" ? "Iniciar navegación" : "Finalizar viaje"}
                 onPress={ride.status === "accepted" ? onAdvance : onComplete}
               />
+            </View>
+          ) : online && availableRide ? (
+            <View style={styles.requestCard}>
+              <View style={styles.requestTop}>
+                <Text style={styles.newRide}>NUEVA SOLICITUD</Text>
+                <Text style={styles.requestTime}>Pago en efectivo</Text>
+              </View>
+              <Text style={styles.requestTitle}>
+                {availableRide.pickup_address} → {availableRide.destination_address}
+              </Text>
+              <Text style={styles.requestDetail}>Solicitud verificada · Pago en efectivo</Text>
+              <Text style={styles.requestFare}>
+                ${Number(availableRide.estimated_fare || 0).toLocaleString("es-CO")}
+              </Text>
+              <PrimaryButton label="Aceptar viaje" onPress={() => onAccept(availableRide)} />
             </View>
           ) : (
             <View style={styles.emptyRequests}>
@@ -482,37 +845,44 @@ function DriverView({
   );
 }
 
-function AdminView({ driverApproved, driverSubmitted, onApprove, ride }) {
+function AdminView({ pendingDrivers, rides, onApprove }) {
+  const activeRides = rides.filter((ride) =>
+    ["searching", "accepted", "in_progress"].includes(ride.status)
+  ).length;
   return (
     <ScrollView style={styles.adminScroll} contentContainerStyle={styles.adminContent}>
       <Text style={styles.eyebrow}>CENTRO DE CONTROL</Text>
       <Text style={styles.sheetTitle}>Panel de administración</Text>
       <View style={styles.statsRow}>
-        <StatCard value="24" label="Viajes hoy" />
-        <StatCard value="18" label="Conductores" />
-        <StatCard value="3" label="En curso" />
+        <StatCard value={String(rides.length)} label="Viajes recientes" />
+        <StatCard value={String(pendingDrivers.length)} label="Por aprobar" />
+        <StatCard value={String(activeRides)} label="En curso" />
       </View>
       <View style={styles.adminSection}>
         <View style={styles.sectionHeading}>
           <Text style={styles.sectionTitle}>Conductores por aprobar</Text>
-          <Text style={styles.countBadge}>{driverApproved ? "0" : "1"}</Text>
+          <Text style={styles.countBadge}>{pendingDrivers.length}</Text>
         </View>
-        {!driverApproved ? (
-          <View style={styles.adminCard}>
+        {pendingDrivers.length ? pendingDrivers.map((driver) => (
+          <View key={driver.id} style={[styles.adminCard, styles.adminCardSpaced]}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>CR</Text>
-            </View>
-            <View style={styles.driverInfo}>
-              <Text style={styles.driverName}>Camila Rodríguez</Text>
-              <Text style={styles.driverCar}>
-                {driverSubmitted ? "Documentos enviados · hace 12 min" : "Solicitud iniciada · pendiente de documentos"}
+              <Text style={styles.avatarText}>
+                {(driver.full_name || "C").slice(0, 1).toUpperCase()}
               </Text>
             </View>
-            <TouchableOpacity style={styles.approveButton} onPress={onApprove}>
-              <Text style={styles.approveText}>{driverSubmitted ? "Aprobar" : "Revisar"}</Text>
+            <View style={styles.driverInfo}>
+              <Text style={styles.driverName}>{driver.full_name || "Conductor"}</Text>
+              <Text style={styles.driverCar}>Solicitud de conductor pendiente</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.approveButton}
+              onPress={() => onApprove(driver.id)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.approveText}>Aprobar</Text>
             </TouchableOpacity>
           </View>
-        ) : (
+        )) : (
           <Text style={styles.emptyAdmin}>Todo al día. No hay solicitudes pendientes.</Text>
         )}
       </View>
@@ -521,18 +891,23 @@ function AdminView({ driverApproved, driverSubmitted, onApprove, ride }) {
           <Text style={styles.sectionTitle}>Viajes recientes</Text>
           <Text style={styles.viewAll}>Ver todos</Text>
         </View>
-        <View style={styles.adminCard}>
-          <View style={styles.rideIcon}>
-            <Text style={styles.rideIconText}>↗</Text>
-          </View>
-          <View style={styles.driverInfo}>
-            <Text style={styles.driverName}>Parque de la 93 → El Dorado</Text>
-            <Text style={styles.driverCar}>
-              {ride ? rideLabels[ride.status] : "Completado · 10:42 a. m."}
+        {rides.slice(0, 5).map((ride) => (
+          <View key={ride.id} style={[styles.adminCard, styles.adminCardSpaced]}>
+            <View style={styles.rideIcon}>
+              <Text style={styles.rideIconText}>↗</Text>
+            </View>
+            <View style={styles.driverInfo}>
+              <Text style={styles.driverName}>
+                {ride.pickup_address} → {ride.destination_address}
+              </Text>
+              <Text style={styles.driverCar}>{rideLabels[ride.status] || ride.status}</Text>
+            </View>
+            <Text style={styles.adminFare}>
+              ${Number(ride.estimated_fare || 0).toLocaleString("es-CO")}
             </Text>
           </View>
-          <Text style={styles.adminFare}>$28.500</Text>
-        </View>
+        ))}
+        {!rides.length && <Text style={styles.emptyAdmin}>Aún no hay viajes.</Text>}
       </View>
       <View style={styles.supportCard}>
         <Text style={styles.supportIcon}>♡</Text>
@@ -543,7 +918,7 @@ function AdminView({ driverApproved, driverSubmitted, onApprove, ride }) {
         <Text style={styles.chevron}>›</Text>
       </View>
       <Text style={styles.helperText}>
-        Datos de muestra · configura Supabase para operaciones reales
+        El acceso administrativo lo asigna un administrador del sistema.
       </Text>
     </ScrollView>
   );
@@ -578,6 +953,48 @@ function PrimaryButton({ label, onPress, disabled, secondary }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#f5f7f5" },
+  authScreen: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 25,
+    backgroundColor: "#f5f7f5"
+  },
+  loginCard: {
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "#e8eeea"
+  },
+  loginTitle: {
+    color: "#153d33",
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 32,
+    marginBottom: 8
+  },
+  authSubtitle: {
+    color: "#829088",
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: 19
+  },
+  microsoftButton: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: "#dce5df",
+    borderRadius: 13,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10
+  },
+  microsoftButtonText: { color: "#2e4e3d", fontSize: 12, fontWeight: "800" },
+  loginFootnote: {
+    color: "#9ba59f",
+    fontSize: 9,
+    textAlign: "center",
+    marginTop: 19
+  },
   header: {
     paddingHorizontal: 22,
     paddingTop: 7,
@@ -586,6 +1003,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center"
   },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 7 },
+  profileButton: {
+    backgroundColor: "#edf3ef",
+    borderRadius: 99,
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  profileButtonText: { color: "#315842", fontSize: 9, fontWeight: "800" },
   brand: { color: "#123c32", fontSize: 25, fontWeight: "900", letterSpacing: -1.4 },
   brandSub: { color: "#87948e", fontSize: 8, fontWeight: "700", letterSpacing: 1.7 },
   sosButton: {
@@ -609,6 +1034,7 @@ const styles = StyleSheet.create({
   roleButtonActive: { backgroundColor: "#fff", elevation: 2 },
   roleText: { color: "#7c8983", fontSize: 12, fontWeight: "700" },
   roleTextActive: { color: "#153d33" },
+  adminMode: { justifyContent: "center" },
   mapWrap: {
     flex: 1,
     marginHorizontal: 15,
@@ -849,6 +1275,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e8eeea"
   },
+  adminCardSpaced: { marginBottom: 7 },
   approveButton: { backgroundColor: "#eaf4ed", borderRadius: 8, padding: 8 },
   approveText: { color: "#2a7753", fontSize: 9, fontWeight: "900" },
   emptyAdmin: { color: "#89958f", fontSize: 10, paddingVertical: 8 },

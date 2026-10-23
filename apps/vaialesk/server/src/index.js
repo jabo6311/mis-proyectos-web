@@ -2,13 +2,22 @@ import "dotenv/config";
 import cors from "cors";
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
+import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from "jose";
 
-const requiredEnv = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"];
+const requiredEnv = [
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "AUTH0_DOMAIN",
+  "AUTH0_AUDIENCE"
+];
 const missingEnv = requiredEnv.filter((key) => !process.env[key]);
 if (missingEnv.length) {
   throw new Error(`Missing required environment variables: ${missingEnv.join(", ")}`);
 }
 
+const auth0Domain = process.env.AUTH0_DOMAIN.replace(/^https?:\/\//, "").replace(/\/$/, "");
+const auth0Issuer = `https://${auth0Domain}/`;
+const auth0Jwks = createRemoteJWKSet(new URL(`${auth0Issuer}.well-known/jwks.json`));
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const supabaseAdmin = createClient(
@@ -27,19 +36,77 @@ async function requireUser(req, res, next) {
     : null;
   if (!token) return res.status(401).json({ error: "Se requiere una sesión." });
 
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data.user) return res.status(401).json({ error: "Sesión inválida o vencida." });
+  let claims;
+  try {
+    ({ payload: claims } = await jwtVerify(token, auth0Jwks, {
+      issuer: auth0Issuer,
+      audience: process.env.AUTH0_AUDIENCE,
+      algorithms: ["RS256"]
+    }));
+  } catch (error) {
+    if (error instanceof joseErrors.JOSEError && error.code !== "ERR_JWKS_TIMEOUT") {
+      return res.status(401).json({ error: "Sesión inválida o vencida." });
+    }
+    return res.status(503).json({ error: "No se pudo validar la sesión. Intenta de nuevo." });
+  }
 
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from("profiles")
-    .select("id, role, driver_status")
-    .eq("id", data.user.id)
-    .single();
-  if (profileError) return res.status(403).json({ error: "No se encontró el perfil." });
+  if (typeof claims.sub !== "string" || !claims.sub) {
+    return res.status(401).json({ error: "El token no contiene una identidad válida." });
+  }
 
-  req.user = data.user;
-  req.profile = profile;
-  next();
+  try {
+    let { data: profile, error } = await supabaseAdmin
+      .from("profiles")
+      .select("id, auth0_sub, full_name, role, driver_status")
+      .eq("auth0_sub", claims.sub)
+      .maybeSingle();
+    if (error) throw error;
+
+    if (!profile) {
+      const { data: createdProfile, error: createError } = await supabaseAdmin
+        .from("profiles")
+        .insert({
+          auth0_sub: claims.sub,
+          full_name:
+            typeof claims["https://vaialesk.app/name"] === "string"
+              ? claims["https://vaialesk.app/name"]
+              : typeof claims["https://vaialesk.app/email"] === "string"
+                ? claims["https://vaialesk.app/email"]
+                : ""
+        })
+        .select("id, auth0_sub, full_name, role, driver_status")
+        .single();
+
+      if (createError?.code !== "23505") {
+        if (createError) throw createError;
+        profile = createdProfile;
+      } else {
+        const { data: existingProfile, error: retryError } = await supabaseAdmin
+          .from("profiles")
+          .select("id, auth0_sub, full_name, role, driver_status")
+          .eq("auth0_sub", claims.sub)
+          .single();
+        if (retryError) throw retryError;
+        profile = existingProfile;
+      }
+    }
+
+    req.user = {
+      sub: claims.sub,
+      email:
+        typeof claims["https://vaialesk.app/email"] === "string"
+          ? claims["https://vaialesk.app/email"]
+          : null,
+      name:
+        typeof claims["https://vaialesk.app/name"] === "string"
+          ? claims["https://vaialesk.app/name"]
+          : null
+    };
+    req.profile = profile;
+    return next();
+  } catch (error) {
+    return respondWithError(res, error);
+  }
 }
 
 function requireAdmin(req, res, next) {
@@ -55,6 +122,72 @@ function respondWithError(res, error) {
 }
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
+app.get("/api/me", requireUser, (req, res) => {
+  return res.json({
+    user: req.user,
+    profile: {
+      id: req.profile.id,
+      full_name: req.profile.full_name,
+      role: req.profile.role,
+      driver_status: req.profile.driver_status
+    }
+  });
+});
+
+app.post("/api/drivers/application", requireUser, async (req, res) => {
+  if (req.profile.role !== "passenger") {
+    return res.status(409).json({ error: "Ya tienes un perfil de conductor o administrador." });
+  }
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .update({ role: "driver", driver_status: "pending" })
+      .eq("id", req.profile.id)
+      .eq("role", "passenger")
+      .select("id, full_name, role, driver_status")
+      .single();
+    if (error) throw error;
+    return res.json({ profile: data });
+  } catch (error) {
+    return respondWithError(res, error);
+  }
+});
+
+app.get("/api/rides/current", requireUser, async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("rides")
+      .select("*")
+      .or(`passenger_id.eq.${req.profile.id},driver_id.eq.${req.profile.id}`)
+      .in("status", ["searching", "accepted", "in_progress"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return res.json({ ride: data });
+  } catch (error) {
+    return respondWithError(res, error);
+  }
+});
+
+app.get("/api/rides/available", requireUser, async (req, res) => {
+  if (req.profile.role !== "driver" || req.profile.driver_status !== "approved") {
+    return res.status(403).json({ error: "Se requiere un conductor aprobado." });
+  }
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("rides")
+      .select("*")
+      .eq("status", "searching")
+      .order("created_at", { ascending: true })
+      .limit(20);
+    if (error) throw error;
+    return res.json({ rides: data });
+  } catch (error) {
+    return respondWithError(res, error);
+  }
+});
 
 app.post("/api/rides", requireUser, async (req, res) => {
   const {
@@ -81,7 +214,7 @@ app.post("/api/rides", requireUser, async (req, res) => {
     const { data, error } = await supabaseAdmin
       .from("rides")
       .insert({
-        passenger_id: req.user.id,
+        passenger_id: req.profile.id,
         pickup_address,
         destination_address,
         pickup_lat,
@@ -100,18 +233,16 @@ app.post("/api/rides", requireUser, async (req, res) => {
   }
 });
 
-app.get("/api/rides/available", requireUser, async (req, res) => {
-  if (req.profile.role !== "driver" || req.profile.driver_status !== "approved") {
-    return res.status(403).json({ error: "Se requiere un conductor aprobado." });
-  }
+app.get("/api/rides/:id", requireUser, async (req, res) => {
   try {
-    const { data, error } = await supabaseAdmin
-      .from("rides")
-      .select("*")
-      .eq("status", "searching")
-      .order("created_at", { ascending: true });
+    let query = supabaseAdmin.from("rides").select("*").eq("id", req.params.id);
+    if (req.profile.role !== "admin") {
+      query = query.or(`passenger_id.eq.${req.profile.id},driver_id.eq.${req.profile.id}`);
+    }
+    const { data, error } = await query.maybeSingle();
     if (error) throw error;
-    return res.json({ rides: data });
+    if (!data) return res.status(404).json({ error: "No se encontró el viaje." });
+    return res.json({ ride: data });
   } catch (error) {
     return respondWithError(res, error);
   }
@@ -124,7 +255,7 @@ app.post("/api/rides/:id/accept", requireUser, async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin
       .from("rides")
-      .update({ driver_id: req.user.id, status: "accepted" })
+      .update({ driver_id: req.profile.id, status: "accepted" })
       .eq("id", req.params.id)
       .eq("status", "searching")
       .is("driver_id", null)
@@ -159,9 +290,9 @@ app.patch("/api/rides/:id/status", requireUser, async (req, res) => {
       if (req.profile.driver_status !== "approved") {
         return res.status(403).json({ error: "Se requiere un conductor aprobado." });
       }
-      query = query.eq("driver_id", req.user.id);
+      query = query.eq("driver_id", req.profile.id);
     } else if (req.profile.role === "passenger" && status === "cancelled") {
-      query = query.eq("passenger_id", req.user.id);
+      query = query.eq("passenger_id", req.profile.id);
     } else {
       return res.status(403).json({ error: "No puedes cambiar el estado de este viaje." });
     }
@@ -185,7 +316,7 @@ app.post("/api/rides/:id/rating", requireUser, async (req, res) => {
       .from("rides")
       .select("id, passenger_id, driver_id, status")
       .eq("id", req.params.id)
-      .eq("passenger_id", req.user.id)
+      .eq("passenger_id", req.profile.id)
       .eq("status", "completed")
       .single();
     if (rideError) throw rideError;

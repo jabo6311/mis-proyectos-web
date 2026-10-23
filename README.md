@@ -1,6 +1,21 @@
-# Mis Proyectos Web
+# Mis Proyectos
 
-Repositorio donde guardo mis proyectos mientras aprendo desarrollo web con HTML, CSS y JavaScript.
+Repositorio para practicar y organizar proyectos de desarrollo.
+
+## 🌐 Aplicaciones web
+
+Las páginas web sencillas hechas con HTML, CSS y JavaScript están en la raíz del repositorio. Por ejemplo:
+
+- [Lista de Tareas](lista-de-tareas.html)
+- [Calculadora](calculadora.html)
+- [Conversor](conversor.html)
+- [Mi primera página](mi-primera-pagina.html)
+
+## 📱 Aplicaciones móviles
+
+Los proyectos de aplicaciones móviles están separados en [`apps/`](apps/).
+
+- [Vaialesk](apps/vaialesk/README.md): MVP móvil para iOS y Android, con React Native, Expo, Node.js y Supabase.
 
 ## 📋 Lista de Tareas
 
@@ -26,4 +41,4 @@ Mi primer proyecto completo: una lista de tareas interactiva.
 
 ---
 
-*Proyecto hecho como parte de mi aprendizaje de desarrollo web.*
+*Proyectos hechos como parte de mi aprendizaje de desarrollo.*
