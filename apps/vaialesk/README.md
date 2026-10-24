@@ -15,6 +15,15 @@ MVP de movilidad urbana para iOS y Android con React Native, Expo SDK 57, Auth0,
 
 1. Crea una aplicación Auth0 de tipo Native. Configura las conexiones de Google y Microsoft y habilítalas para esta aplicación.
 2. Crea un API en Auth0, activa la opción **Allow Offline Access** y habilita refresh token rotation en la aplicación Native. Usa como identifier/audience exactamente la misma cadena para `EXPO_PUBLIC_AUTH0_AUDIENCE` y `AUTH0_AUDIENCE`.
+
+   En **Applications → APIs → Vaialesk API → Application Access**, busca la
+   aplicación Native cuyo Client ID coincide con `EXPO_PUBLIC_AUTH0_CLIENT_ID`.
+   Pulsa **Edit → User-delegated Access → Grant Access**. Debe aparecer un
+   **Grant ID** y la opción **Revoke Access**, confirmando que quedó autorizado.
+   Si la política es **Per-app authorization** y falta este permiso, Auth0
+   rechaza ambos proveedores con `Client ... is not authorized to access
+   resource server ...`, aunque Google y Microsoft estén habilitados.
+
 3. Configura estos valores en `apps/vaialesk/.env`:
 
    ```env
