@@ -15,6 +15,15 @@ MVP de movilidad urbana para iOS y Android con React Native, Expo SDK 57, Auth0,
 
 1. Crea una aplicación Auth0 de tipo Native. Configura las conexiones de Google y Microsoft y habilítalas para esta aplicación.
 2. Crea un API en Auth0, activa la opción **Allow Offline Access** y habilita refresh token rotation en la aplicación Native. Usa como identifier/audience exactamente la misma cadena para `EXPO_PUBLIC_AUTH0_AUDIENCE` y `AUTH0_AUDIENCE`.
+
+   En **Applications → APIs → Vaialesk API → Application Access**, busca la
+   aplicación Native cuyo Client ID coincide con `EXPO_PUBLIC_AUTH0_CLIENT_ID`.
+   Pulsa **Edit → User-delegated Access → Grant Access**. Debe aparecer un
+   **Grant ID** y la opción **Revoke Access**, confirmando que quedó autorizado.
+   Si la política es **Per-app authorization** y falta este permiso, Auth0
+   rechaza ambos proveedores con `Client ... is not authorized to access
+   resource server ...`, aunque Google y Microsoft estén habilitados.
+
 3. Configura estos valores en `apps/vaialesk/.env`:
 
    ```env
@@ -73,6 +82,50 @@ El API valida firma, issuer y audience del access token de Auth0. `SUPABASE_SERV
 
 ## Probar en Android
 
+### APK de prueba recomendado (sin Expo Go ni Metro)
+
+Google y Microsoft usan el módulo nativo `react-native-auth0`, ausente en
+Expo Go. La app detecta ese entorno antes de importar Auth0 y muestra cómo
+continuar. Abrir el QR en Expo Go no permite probar el login.
+
+1. Configura Auth0 y el API como se indica arriba. En EAS, carga las variables
+   públicas del cliente en el entorno `development`. Usa una URL de API accesible
+   desde el teléfono y deja el servidor encendido. Para probar fuera de tu red,
+   usa un API publicado con HTTPS. `localhost` es el propio teléfono.
+2. Desde `apps/vaialesk`, ejecuta:
+
+   ```bash
+   npm ci
+   npx eas-cli build --profile preview --platform android
+   ```
+
+3. Descarga e instala el APK que entregue EAS. Abre **Vaialesk desde su icono**,
+   pulsa Google o Microsoft, elige la cuenta y comprueba que vuelve a Vaialesk.
+   Este perfil incluye el JavaScript y no necesita Metro.
+4. Verifica ambos proveedores, cerrar sesión y volver a entrar. Con el API
+   apagado debe aparecer un error recuperable con **Reintentar** en unos 15 s;
+   enciéndelo y reintenta. Una respuesta inválida de `/api/me` también muestra
+   un error, en lugar de dejar la carga esperando indefinidamente.
+
+Si el regreso del navegador no abre la app, comprueba en Auth0 los Allowed
+Callback URLs y Allowed Logout URLs de arriba, y que Google/Microsoft estén
+habilitados para el Client ID del APK. Estos valores requieren acceso a tu
+tenant y no se cambian automáticamente desde este repositorio.
+
+El mapa de Android requiere `GOOGLE_MAPS_API_KEY` en el entorno de EAS durante
+el build, con Maps SDK for Android habilitado y restricciones que admitan el
+paquete `com.vaialesk.mobile` y la firma del APK. Sin clave se muestra un aviso
+y se permite probar la cuenta y los viajes sin crear el mapa nativo. Después
+de configurar la clave, el dominio de Auth0 o los callbacks nativos, genera e
+instala un APK nuevo; reiniciar Metro no modifica un APK ya instalado.
+
+### Cliente de desarrollo (requiere Metro)
+
+En los perfiles `preview` y `development`, si `EXPO_PUBLIC_API_URL` usa HTTP,
+el APK permite tráfico sin TLS únicamente al host del API mediante una
+configuración de seguridad de red de Android. El resto de hosts siguen
+requiriendo HTTPS. Esta excepción no se activa para el perfil `production`.
+
 Desde esta carpeta:
 
 ```bash
@@ -105,3 +158,4 @@ Instala el APK entregado por EAS. Con el dispositivo en la misma red que el API,
 - El API rechaza cualquier método de pago distinto a `cash`; no hay cobros digitales.
 
 El SOS, la navegación giro a giro, carga de documentos y cálculo de tarifas todavía requieren integraciones antes de producción.
+
