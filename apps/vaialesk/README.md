@@ -1,161 +1,111 @@
-# Vaialesk
+# Vaialesk 1.1 — MVP de movilidad
 
-MVP de movilidad urbana para iOS y Android con React Native, Expo SDK 57, Auth0, Node.js y Supabase. Pasajeros y conductores se autentican con Google o Microsoft a través de Auth0. El único medio de pago implementado es efectivo.
+App Android/iOS con React Native y Expo SDK 57. Incluye mapas interactivos, rutas por calles, viajes en efectivo, experiencia de pasajero y conductor, y panel de administración dentro de la misma app.
 
-## Requisitos
+## Presentación para una persona, desde cualquier red
 
-- Node.js 20 o superior.
-- Una aplicación **Native** en Auth0, con Google y Microsoft configurados como conexiones habilitadas.
-- Un proyecto Supabase y un API Auth0 (audience) configurado.
-- EAS CLI para crear el build de desarrollo, o Android Studio/Xcode para un build local.
+Instala el APK `preview` y abre **Probar la presentación**. Esta opción no depende del computador, del API ni de una cuenta de Auth0. El progreso se guarda en el teléfono con AsyncStorage; los mapas, la búsqueda de direcciones y el cálculo de rutas requieren Internet.
 
-`react-native-auth0` requiere código nativo y **no funciona con Expo Go**. Instala el build de desarrollo generado abajo en el dispositivo para probar login y callbacks. `npm start` inicia Metro en modo development client para que el QR no abra Expo Go.
+1. En **Pasajero**, elige origen y destino: busca una dirección incluyendo la ciudad, usa los lugares sugeridos, selecciona un punto en el mapa o utiliza tu ubicación como origen.
+2. Revisa distancia, tiempo y tarifa estimada en COP. Pulsa **Pedir viaje**.
+3. En **Administración**, pulsa **Aprobar conductor** para el perfil de prueba.
+4. En **Conductor**, pulsa **Conectarme** y luego **Aceptar viaje**.
+5. Prueba **Simular llegada al origen**, después **Pasajero a bordo · Iniciar viaje**.
+6. Usa **Simular avance en el mapa** y **Llegamos · Finalizar viaje**.
+7. Vuelve a **Pasajero**, califica con estrellas y revisa **Historial**.
+8. En **Administración**, comprueba los indicadores, conductores, viajes y cancelaciones. Puedes ver un viaje en el mapa desde el historial.
 
-## Configurar Auth0
+Las tres vistas comparten los mismos viajes de prueba en ese teléfono. No se crean viajes reales ni se cobran pagos. La ubicación simulada está identificada en el mapa. Para repetir desde cero: **Cuenta → Reiniciar presentación**; requiere confirmación y solo borra los datos locales de la presentación.
 
-1. Crea una aplicación Auth0 de tipo Native. Configura las conexiones de Google y Microsoft y habilítalas para esta aplicación.
-2. Crea un API en Auth0, activa la opción **Allow Offline Access** y habilita refresh token rotation en la aplicación Native. Usa como identifier/audience exactamente la misma cadena para `EXPO_PUBLIC_AUTH0_AUDIENCE` y `AUTH0_AUDIENCE`.
+## Modo conectado
 
-   En **Applications → APIs → Vaialesk API → Application Access**, busca la
-   aplicación Native cuyo Client ID coincide con `EXPO_PUBLIC_AUTH0_CLIENT_ID`.
-   Pulsa **Edit → User-delegated Access → Grant Access**. Debe aparecer un
-   **Grant ID** y la opción **Revoke Access**, confirmando que quedó autorizado.
-   Si la política es **Per-app authorization** y falta este permiso, Auth0
-   rechaza ambos proveedores con `Client ... is not authorized to access
-   resource server ...`, aunque Google y Microsoft estén habilitados.
+**Entrar con mi cuenta** conserva Google y Microsoft mediante Auth0. Los datos de presentación están separados de los usuarios y viajes del servidor.
 
-3. Configura estos valores en `apps/vaialesk/.env`:
+- Pasajero: origen/destino elegibles, ruta y estimación, solicitud, cancelación durante la búsqueda o el viaje, conductor asignado, historial y calificación.
+- Conductor: nombre, vehículo y placa; solicitud de aprobación; conexión/desconexión; aceptación; ubicación de primer plano con permiso; inicio y finalización del viaje. Un conductor aprobado puede volver al modo pasajero cuando no tiene un viaje activo.
+- Administración: indicadores de actividad reciente, revisión/aprobación/rechazo de conductores, vehículos, usuarios, viajes, mapa y cancelación administrativa. Solo las cuentas con rol `admin` tienen acceso.
 
-   ```env
-   EXPO_PUBLIC_API_URL=http://IP_DE_TU_COMPUTADOR:3000
-   EXPO_PUBLIC_AUTH0_DOMAIN=tu-tenant.us.auth0.com
-   EXPO_PUBLIC_AUTH0_CLIENT_ID=client_id_de_la_aplicacion_native
-   EXPO_PUBLIC_AUTH0_AUDIENCE=https://api-vaialesk
-   EXPO_PUBLIC_AUTH0_GOOGLE_CONNECTION=google-oauth2
-   EXPO_PUBLIC_AUTH0_MICROSOFT_CONNECTION=windowslive
-   EXPO_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
-   EXPO_PUBLIC_SUPABASE_ANON_KEY=tu_publishable_o_anon_key
-   GOOGLE_MAPS_API_KEY=
-   ```
+El cliente consulta el API cada 3 segundos. Los perfiles, viajes y calificaciones se guardan en Supabase. El API conserva metadatos de vehículos, ubicación y rutas en `server/.data/operations.json` mediante escrituras atómicas; ese directorio no se publica en Git. Presérvalo al mover el servidor. El historial conectado muestra los 100 viajes más recientes del ámbito autorizado.
 
-   Ajusta el nombre de conexión de Microsoft si tu tenant usa otro (por ejemplo, una conexión de Azure AD/Entra ID).
-4. En Auth0, añade estos **Allowed Callback URLs** y **Allowed Logout URLs**, sustituyendo `DOMAIN` por tu dominio:
+## Configurar y ejecutar
 
-   ```text
-   vaialesk://DOMAIN/ios/com.vaialesk.mobile/callback
-   vaialesk://DOMAIN/android/com.vaialesk.mobile/callback
-   ```
-
-5. Configura una Action `Login / Post Login` para poner `role: authenticated` en el **ID token**. El código en `auth0/supabase-role-action.js` también añade nombre y email namespaced al access token de la API. Publícala y añádela al flujo de login. Supabase usa el ID token para Realtime.
-6. En Supabase, habilita la integración de Auth0 en **Authentication → Third-Party Auth**. Indica el tenant/region. Ejecuta `supabase/schema.sql` en una base nueva; si ya ejecutaste el esquema anterior, aplica `supabase/migrations/20261012000000_auth0_auth.sql` en su lugar.
-
-   Si migras perfiles existentes, antes de que sus usuarios inicien sesión con Auth0, vincula cada perfil con el `sub` exacto de Auth0. La migración asigna valores temporales `legacy-supabase|...` y no puede asociar identidades automáticamente. Consulta esos perfiles y reemplaza el valor usando el ID de perfil correspondiente:
-
-   ```sql
-   select id, full_name, auth0_sub
-   from public.profiles
-   where auth0_sub like 'legacy-supabase|%';
-
-   update public.profiles
-   set auth0_sub = 'google-oauth2|IDENTIFICADOR'
-   where id = 'UUID_DEL_PERFIL';
-   ```
-
-   Si un usuario inicia sesión antes de vincular su perfil, el API creará un perfil nuevo de pasajero para su identidad Auth0.
-
-## Configurar el API
-
-1. Copia `server/.env.example` a `server/.env`:
-
-   ```env
-   PORT=3000
-   SUPABASE_URL=https://tu-proyecto.supabase.co
-   SUPABASE_SERVICE_ROLE_KEY=clave_service_role_solo_del_servidor
-   AUTH0_DOMAIN=tu-tenant.us.auth0.com
-   AUTH0_AUDIENCE=https://api-vaialesk
-   ```
-
-2. Inicia el API con `npm run api`; verifica `GET /health`.
-3. En un teléfono físico, usa la IP local del computador en `EXPO_PUBLIC_API_URL`, no `localhost`.
-
-El API valida firma, issuer y audience del access token de Auth0. `SUPABASE_SERVICE_ROLE_KEY` es solo del servidor: nunca la pongas en `.env` de Expo ni la publiques.
-
-## Probar en Android
-
-### APK de prueba recomendado (sin Expo Go ni Metro)
-
-Google y Microsoft usan el módulo nativo `react-native-auth0`, ausente en
-Expo Go. La app detecta ese entorno antes de importar Auth0 y muestra cómo
-continuar. Abrir el QR en Expo Go no permite probar el login.
-
-1. Configura Auth0 y el API como se indica arriba. En EAS, carga las variables
-   públicas del cliente en el entorno `development`. Usa una URL de API accesible
-   desde el teléfono y deja el servidor encendido. Para probar fuera de tu red,
-   usa un API publicado con HTTPS. `localhost` es el propio teléfono.
-2. Desde `apps/vaialesk`, ejecuta:
-
-   ```bash
-   npm ci
-   npx eas-cli build --profile preview --platform android
-   ```
-
-3. Descarga e instala el APK que entregue EAS. Abre **Vaialesk desde su icono**,
-   pulsa Google o Microsoft, elige la cuenta y comprueba que vuelve a Vaialesk.
-   Este perfil incluye el JavaScript y no necesita Metro.
-4. Verifica ambos proveedores, cerrar sesión y volver a entrar. Con el API
-   apagado debe aparecer un error recuperable con **Reintentar** en unos 15 s;
-   enciéndelo y reintenta. Una respuesta inválida de `/api/me` también muestra
-   un error, en lugar de dejar la carga esperando indefinidamente.
-
-Si el regreso del navegador no abre la app, comprueba en Auth0 los Allowed
-Callback URLs y Allowed Logout URLs de arriba, y que Google/Microsoft estén
-habilitados para el Client ID del APK. Estos valores requieren acceso a tu
-tenant y no se cambian automáticamente desde este repositorio.
-
-El mapa de Android requiere `GOOGLE_MAPS_API_KEY` en el entorno de EAS durante
-el build, con Maps SDK for Android habilitado y restricciones que admitan el
-paquete `com.vaialesk.mobile` y la firma del APK. Sin clave se muestra un aviso
-y se permite probar la cuenta y los viajes sin crear el mapa nativo. Después
-de configurar la clave, el dominio de Auth0 o los callbacks nativos, genera e
-instala un APK nuevo; reiniciar Metro no modifica un APK ya instalado.
-
-### Cliente de desarrollo (requiere Metro)
-
-En los perfiles `preview` y `development`, si `EXPO_PUBLIC_API_URL` usa HTTP,
-el APK permite tráfico sin TLS únicamente al host del API mediante una
-configuración de seguridad de red de Android. El resto de hosts siguen
-requiriendo HTTPS. Esta excepción no se activa para el perfil `production`.
-
-Desde esta carpeta:
+Requiere Node.js 20 o superior. Desde esta carpeta:
 
 ```bash
-npm install
+npm ci
+npm --prefix server ci
+```
+
+Copia `.env.example` a `.env` y completa los valores públicos del cliente:
+
+```env
+EXPO_PUBLIC_API_URL=http://IP_DEL_COMPUTADOR:3000
+EXPO_PUBLIC_AUTH0_DOMAIN=tu-tenant.us.auth0.com
+EXPO_PUBLIC_AUTH0_CLIENT_ID=client_id_native
+EXPO_PUBLIC_AUTH0_AUDIENCE=https://api-vaialesk
+EXPO_PUBLIC_AUTH0_GOOGLE_CONNECTION=google-oauth2
+EXPO_PUBLIC_AUTH0_MICROSOFT_CONNECTION=windowslive
+```
+
+En `server/.env`, configura los valores de `server/.env.example`. La clave `SUPABASE_SERVICE_ROLE_KEY` solo pertenece al servidor. Nunca la incluyas en Expo, EAS, el APK ni Git.
+
+```bash
 npm run api
 ```
 
-En otra terminal crea el cliente nativo de desarrollo:
+Verifica `GET /health`. En una red local, utiliza la IP del computador; `localhost` en Android apunta al teléfono. Para usar el modo conectado desde otra red se necesita publicar el API en un servidor HTTPS accesible. **La presentación autónoma no necesita ese despliegue.**
+
+### Auth0 y Supabase
+
+1. Usa una aplicación Auth0 de tipo **Native** con las conexiones Google/Microsoft habilitadas.
+2. Crea el API con Identifier/audience `https://api-vaialesk` y firma RS256. El audience debe coincidir exactamente en cliente y servidor.
+3. En **Applications → APIs → Vaialesk API → Application Access**, busca el Client ID de la aplicación Native y pulsa **Edit → User-delegated Access → Grant Access**. Debe aparecer un **Grant ID** y **Revoke Access**. La política **Per-app authorization** requiere este permiso incluso si las conexiones de Google/Microsoft ya están habilitadas.
+4. Habilita **Allow Offline Access** en el API y refresh token rotation en la aplicación para renovar sesiones.
+5. En **Allowed Callback URLs** y **Allowed Logout URLs** de la aplicación Native registra, sustituyendo `DOMAIN`:
+
+   ```text
+   vaialesk://DOMAIN/android/com.vaialesk.mobile/callback
+   vaialesk://DOMAIN/ios/com.vaialesk.mobile/callback
+   ```
+
+6. Conserva la Action Post Login `auth0/supabase-role-action.js` del proyecto, que aporta nombre y email namespaced al token. Ejecuta `supabase/schema.sql` en una base nueva; en bases existentes conserva las migraciones y los datos.
+7. Para una cuenta administrativa existente, asigna el rol desde un proceso de confianza en Supabase:
+
+   ```sql
+   update public.profiles set role = 'admin'
+   where auth0_sub = 'SUB_EXACTO_DE_LA_CUENTA_AUTH0';
+   ```
+
+   También puedes configurar `ADMIN_AUTH0_SUBS` en el servidor con una lista de subjects exactos separados por comas. Solo se promocionan esas identidades verificadas por Auth0. El cliente no puede otorgarse el rol `admin`. El panel de la presentación administra únicamente datos locales de prueba.
+
+La API valida firma, issuer y audience, y limita los datos visibles a sus participantes y administradores. La aceptación de viajes usa una actualización condicional; las solicitudes y aceptaciones por identidad se serializan dentro del proceso del API. Para operar varias instancias deben añadirse también restricciones de viaje activo en la base de datos.
+
+## Mapas y ubicación
+
+No se necesita una clave de Google Maps. Se usan Leaflet 1.9.4 y tiles de OpenStreetMap con atribución visible, sin descarga masiva ni modo offline. La búsqueda Nominatim se ejecuta solo al pulsar **Buscar dirección**, con caché y separación entre solicitudes; no hay autocompletado por pulsación. Las rutas se calculan con OSRM y, si el servicio no responde, se muestra explícitamente una estimación aproximada.
+
+- [Política de tiles de OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/)
+- [Política de Nominatim](https://operations.osmfoundation.org/policies/nominatim/)
+- [API de OSRM](https://project-osrm.org/docs/v26.6.1/http)
+
+La presentación mueve el marcador únicamente al pulsar los controles de simulación. El modo conectado comparte GPS solo con permiso de primer plano, como conductor conectado y con un viaje asignado; detiene la captura al salir del modo o terminar el viaje. No implementa navegación giro a giro ni seguimiento en segundo plano.
+
+## Generar APK
 
 ```bash
-npx eas-cli build --profile development --platform android
+npx eas-cli build --profile preview --platform android
 ```
 
-Antes del build en la nube, crea en EAS un entorno `development` para el proyecto y carga las variables `EXPO_PUBLIC_AUTH0_DOMAIN`, `EXPO_PUBLIC_AUTH0_CLIENT_ID`, `EXPO_PUBLIC_AUTH0_AUDIENCE`, `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY`. Son valores del cliente; **no cargues** `SUPABASE_SERVICE_ROLE_KEY` en EAS ni en Expo.
+El perfil `preview` genera un APK firmado con JavaScript incluido, sin Metro. El entorno EAS `development` debe tener las variables públicas para el modo conectado. `react-native-auth0` requiere el APK y no funciona con Expo Go. Reinstala el APK al cambiar módulos nativos, dominio Auth0 o configuración de red.
 
-Instala el APK entregado por EAS. Con el dispositivo en la misma red que el API, inicia Metro con `npm start` y abre Vaialesk desde el development build, no desde Expo Go. Para compilar localmente con Android Studio usa `npx expo run:android`.
+En `preview` y `development`, el plugin `with-android-test-api` permite HTTP únicamente al host del API configurado. El resto de hosts exige HTTPS y la excepción no se activa en `production`.
 
-## Roles y pagos
+## Verificación
 
-- Todo usuario Auth0 nuevo recibe un perfil de pasajero.
-- El usuario puede solicitar perfil de conductor; el conductor no recibe viajes hasta que administración lo apruebe.
-- El rol `admin` solo se asigna desde un proceso de confianza en Supabase. Para un perfil existente, identifica su `auth0_sub` en la base y ejecuta una actualización administrativa, por ejemplo:
+```bash
+npm test
+npm --prefix server test
+npx expo export --platform android
+```
 
-  ```sql
-  update public.profiles
-  set role = 'admin'
-  where auth0_sub = 'google-oauth2|IDENTIFICADOR';
-  ```
-
-- El API rechaza cualquier método de pago distinto a `cash`; no hay cobros digitales.
-
-El SOS, la navegación giro a giro, carga de documentos y cálculo de tarifas todavía requieren integraciones antes de producción.
-
+Las pruebas cubren el recorrido completo de presentación y API, permisos, aprobación de conductores, coordenadas inválidas, cancelaciones, calificaciones, duplicados, aceptación simultánea, persistencia, el arranque sin importar Auth0 en Expo Go y errores de conexión. El API requiere puertos locales disponibles para sus pruebas HTTP.
