@@ -43,3 +43,7 @@ No se declara completado el MVP contractual mientras sigan esos pendientes.
 
 Se mantienen slug, identificadores Android/iOS y callback `vaialesk` por compatibilidad con
 instalaciones y Auth0 existentes; el nombre visible y el icono son VAI.
+
+## Experiencia ligera 1.3
+
+Casa/Trabajo, repetición de rutas con tarifa actual, preferencias y referencia de recogida, y ahorro de datos en Cuenta. Sin nuevas dependencias. Ver [decisiones, límites y mediciones](docs/lightweight-experience.md).

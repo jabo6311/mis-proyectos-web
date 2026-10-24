@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), vm = require("node:vm"), babel = require("@babel/core");
 function load(file, mocks = {}, globals = {}) { const module = { exports: {} }; const code = babel.transformSync(fs.readFileSync(path.join(__dirname, "..", file), "utf8"), { plugins: ["@babel/plugin-transform-modules-commonjs"] }).code; vm.runInNewContext(code, { module, exports: module.exports, require: key => mocks[key], Intl, Date, Math, ...globals }); return module.exports; }
 const rules=require("../shared/operations.cjs");
-const utils = load("ride-utils.js", {"./shared/operations.cjs":rules}), { demoReducer: reduce, initialDemoState } = load("demo-state.js", { "./ride-utils": utils,"./shared/operations.cjs":rules });
+const utils = load("ride-utils.js", {"./shared/operations.cjs":rules}), { demoReducer: reduce, initialDemoState } = load("demo-state.js", { "./ride-utils": utils,"./shared/operations.cjs":rules,"./shared/rider-experience.cjs":require("../shared/rider-experience.cjs") });
 const draft = { pickup: utils.DEFAULT_PICKUP, destination: utils.DEFAULT_DESTINATION, route: { coordinates: [utils.DEFAULT_PICKUP, utils.DEFAULT_DESTINATION], distanceKm: 12, minutes: 25 } };
 function requested() { return reduce(initialDemoState(), { type: "REQUEST", id: "ride-1", draft }); }
 test("the complete solo presentation works across passenger, admin and driver", () => {
@@ -61,4 +61,22 @@ test("map requests abort and release their deadline on Android", async () => {
     fetch: (_, options) => new Promise((_, reject) => { signal = options.signal; signal.addEventListener("abort", () => reject(new Error("aborted"))); })
   });
   await assert.rejects(services.fetchMapJson("https://example.com", {}, 10), /aborted/); assert.equal(signal.aborted, true);
+});
+
+test('map routes coalesce in flight, expire after five minutes and evict old entries',async()=>{
+ let count=0,now=1000000;
+ class Clock extends Date { static now(){return now;} }
+ const services=load('map-services.js',{'./ride-utils':utils},{Date:Clock,setTimeout,clearTimeout,AbortController,fetch:async()=>{count++;await new Promise(setImmediate);return {ok:true,json:async()=>({code:'Ok',routes:[{distance:1000,duration:60,geometry:{coordinates:[[-69.9,18.4],[-69.8,18.5]]}}]})};}});
+ await Promise.all([services.getRoute(draft.pickup,draft.destination),services.getRoute(draft.pickup,draft.destination)]);assert.equal(count,1);
+ await services.getRoute(draft.pickup,draft.destination);assert.equal(count,1);
+ now+=300001;await services.getRoute(draft.pickup,draft.destination);assert.equal(count,2);
+ for(let i=1;i<=64;i++)await services.getRoute({...draft.pickup,latitude:18+i/1000},draft.destination);
+ await services.getRoute(draft.pickup,draft.destination);assert.equal(count,67);
+});
+test('demo preserves pickup reference and preferences when switching to assigned driver',()=>{
+ let s=reduce(initialDemoState(),{type:'REQUEST',id:'details',draft:{...draft,pickup_note:'Puerta azul',preferences:['quiet','luggage']}});
+ s=reduce(s,{type:'ROLE',role:'admin'});s=reduce(s,{type:'REVIEW',approved:true});
+ for(const document_type of rules.DOCUMENT_TYPES)s=reduce(s,{type:'OPERATION',operation:'DOCUMENT_REVIEW',payload:{driver_id:'demo-driver',document_type,approved:true}});
+ s=reduce(s,{type:'ROLE',role:'driver'});s=reduce(s,{type:'ONLINE',online:true});s=reduce(s,{type:'ACCEPT',id:'details'});
+ assert.equal(s.rides[0].pickup_note,'Puerta azul');assert.deepEqual(Array.from(s.rides[0].preferences),['quiet','luggage']);
 });
