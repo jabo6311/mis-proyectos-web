@@ -1,0 +1,6 @@
+import React,{useState} from "react";
+import {Text,Platform,TouchableOpacity} from "react-native";
+import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
+const Action=({children,onPress})=><TouchableOpacity accessibilityRole="button" onPress={onPress} style={{backgroundColor:"#197652",padding:14,borderRadius:12}}><Text style={{color:"white",fontWeight:"700",textAlign:"center"}}>{children}</Text></TouchableOpacity>;
+export default function NotificationConsent({e}){const[message,setMessage]=useState("");if(e.presentation)return null;return <><Action onPress={async()=>{try{if(Platform.OS==="android")await Notifications.setNotificationChannelAsync("trips",{name:"Viajes VAI",importance:Notifications.AndroidImportance.HIGH});const permission=await Notifications.requestPermissionsAsync();if(permission.status!=="granted")throw new Error("Puedes seguir usando VAI sin notificaciones.");const token=await Notifications.getExpoPushTokenAsync({projectId:Constants.expoConfig?.extra?.eas?.projectId});await e.registerPush(token.data);setMessage("Avisos de viajes activados en este teléfono.");}catch(err){setMessage(err.message||"No se pudo activar el servicio de notificaciones.");}}}>Activar avisos de viajes</Action>{message?<Text>{message}</Text>:null}</>;}

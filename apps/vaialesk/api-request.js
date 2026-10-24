@@ -37,7 +37,7 @@ export async function requestApi({
     if (!response.ok) {
       throw new Error(body?.error || `No se pudo completar la solicitud (HTTP ${response.status}).`);
     }
-    if (path === "/api/me" && (!body?.profile?.id || !["passenger", "driver", "admin"].includes(body.profile.role))) {
+    if (path === "/api/me" && (!body?.profile?.id || !["passenger", "driver", "admin", "dispatcher"].includes(body.profile.role))) {
       throw new Error("El API no devolvió un perfil válido. Revisa la configuración del servidor y reintenta.");
     }
     return body;

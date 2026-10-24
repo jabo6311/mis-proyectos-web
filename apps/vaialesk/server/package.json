@@ -1,11 +1,14 @@
 {
-  "name": "vaialesk-api",
-  "version": "1.0.0",
+  "name": "vai-api",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test tests/*.test.js",
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "backup": "node scripts/backup.js",
+    "backup:inspect": "node scripts/inspect-backup.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

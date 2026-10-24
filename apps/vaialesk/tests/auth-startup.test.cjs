@@ -65,33 +65,6 @@ test("a standalone APK loads the native app", () => {
   assert.equal(App().type, NativeApp);
 });
 
-for (const configured of [false, true]) {
-  test(`Android map is mounted only with configured key (${configured})`, () => {
-    let stateIndex = 0;
-    const hooks = { ...react, useState: (initial) => [
-      stateIndex++ === 0 ? { id: "profile-1", role: "passenger" } : initial,
-      () => {}
-    ] };
-    const { default: App } = load("NativeApp.js", {
-      react: hooks, "react-native": rn,
-      "react-native-maps": { __esModule: true, default: "MapView", Marker: "Marker", Polyline: "Polyline" },
-      "expo-status-bar": { StatusBar: "StatusBar" },
-      "react-native-auth0": {
-        Auth0Provider: "Auth0Provider",
-        useAuth0: () => ({ user: { sub: "google-oauth2|test" }, isLoading: false })
-      },
-      "@supabase/supabase-js": {},
-      "react-native-safe-area-context": { SafeAreaProvider: "SafeAreaProvider", SafeAreaView: "SafeAreaView" },
-      "expo-constants": { expoConfig: { extra: { androidMapsConfigured: configured } } },
-      "./api-request": {}
-    });
-    const authenticatedApp = App().children[0].children[0].type;
-    const tree = JSON.stringify(authenticatedApp());
-    assert.equal(tree.includes('"type":"MapView"'), configured);
-    assert.equal(tree.includes("Mapa no configurado"), !configured);
-  });
-}
-
 const { requestApi } = load("api-request.js");
 const defaults = {
   apiUrl: "https://api.example.com", path: "/api/me",

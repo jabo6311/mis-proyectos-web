@@ -1,12 +1,17 @@
 export default {
   expo: {
-    name: "Vaialesk",
+    name: "VAI",
     slug: "vaialesk",
-    version: "1.0.0",
+    version: "1.2.0",
     scheme: "vaialesk",
     orientation: "portrait",
     userInterfaceStyle: "light",
+    icon: "./assets/vai-icon.png",
+    web: { name: "VAI · Administración y despacho", favicon: "./assets/vai-icon.png" },
     plugins: [
+      "expo-notifications",
+      ["expo-image-picker",{photosPermission:"Selecciona una fotografía de tu documento para que VAI valide tu perfil.",cameraPermission:false,microphonePermission:false}],
+      ["expo-location", { locationWhenInUsePermission: "Permite que VAI use tu ubicación para elegir el origen y compartir tu posición durante el viaje." }],
       [
         "./plugins/with-android-test-api",
         {
@@ -27,22 +32,13 @@ export default {
     ],
     ios: {
       bundleIdentifier: "com.vaialesk.mobile",
-      supportsTablet: true,
-      config: {
-        googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ""
-      }
+      supportsTablet: true
     },
     android: {
       package: "com.vaialesk.mobile",
-      config: {
-        googleMaps: {
-          apiKey: process.env.GOOGLE_MAPS_API_KEY || ""
-        }
-      }
+      versionCode: 3
     },
     extra: {
-      // Keep the native build's capability in the manifest used by Metro too.
-      androidMapsConfigured: Boolean(process.env.GOOGLE_MAPS_API_KEY?.trim()),
       eas: {
         projectId: "fcf4ec62-e9cb-44d5-aa9b-0ade8d3f2641"
       }
