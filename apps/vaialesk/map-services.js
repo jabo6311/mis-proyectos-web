@@ -19,7 +19,7 @@ export async function searchPlaces(query) {
   if (wait) await new Promise(resolve => setTimeout(resolve, wait));
   lastSearch = Date.now();
   const body = await fetchMapJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=es&q=${encodeURIComponent(key)}`, {
-    headers: { "User-Agent": "Vaialesk-MVP/1.1 (https://github.com/jabo6311/mis-proyectos-web)" }
+    headers: { "User-Agent": "VAI-MVP/1.2 (https://github.com/jabo6311/mis-proyectos-web)" }
   });
   const places = body.map(p => ({ latitude: Number(p.lat), longitude: Number(p.lon), address: p.display_name })).filter(validPoint);
   cache.set(key, places);
@@ -30,9 +30,10 @@ export async function getRoute(pickup, destination) {
   const key = [pickup.latitude, pickup.longitude, destination.latitude, destination.longitude].join(",");
   if (cache.has(key)) return cache.get(key);
   try {
-    const data = await fetchMapJson(`https://router.project-osrm.org/route/v1/driving/${pickup.longitude},${pickup.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=geojson`), r = data.routes?.[0];
+    const data = await fetchMapJson(`https://router.project-osrm.org/route/v1/driving/${pickup.longitude},${pickup.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=geojson&steps=true`), r = data.routes?.[0];
     if (data.code !== "Ok" || !r?.geometry?.coordinates?.length) throw new Error("no road route");
-    const route = { coordinates: r.geometry.coordinates.map(([longitude, latitude]) => ({ latitude, longitude })), distanceKm: r.distance / 1000, minutes: Math.max(1, Math.ceil(r.duration / 60)), approximate: false };
+    const route = { coordinates: r.geometry.coordinates.map(([longitude, latitude]) => ({ latitude, longitude })), distanceKm: r.distance / 1000, minutes: Math.max(1, Math.ceil(r.duration / 60)), approximate: false, steps:(r.legs||[]).flatMap(leg=>leg.steps||[]).map(s=>({type:s.maneuver?.type,modifier:s.maneuver?.modifier,name:s.name||"",distance:s.distance,location:s.maneuver?.location})) };
+    if(cache.size>256)cache.clear();
     cache.set(key, route);
     return route;
   } catch {

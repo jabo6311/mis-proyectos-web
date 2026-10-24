@@ -6,15 +6,15 @@ export default function App() {
   if (Constants.executionEnvironment === "storeClient") {
     return (
       <View style={styles.screen}>
-        <Text style={styles.brand}>vaialesk</Text>
-        <Text style={styles.title}>Instala el APK de Vaialesk</Text>
+        <Text style={styles.brand}>VAI</Text>
+        <Text style={styles.title}>Instala el APK de VAI</Text>
         <Text style={styles.body}>
           Expo Go no incluye el módulo nativo de Auth0 y no puede completar
           el inicio de sesión con Google o Microsoft.
         </Text>
         <Text style={styles.body}>
           Instala el APK de prueba generado con el perfil preview y abre
-          Vaialesk desde su propio icono en Android.
+          VAI desde su propio icono en Android.
         </Text>
       </View>
     );

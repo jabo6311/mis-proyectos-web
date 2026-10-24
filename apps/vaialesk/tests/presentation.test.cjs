@@ -2,30 +2,33 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), vm = require("node:vm"), babel = require("@babel/core");
 function load(file, mocks = {}, globals = {}) { const module = { exports: {} }; const code = babel.transformSync(fs.readFileSync(path.join(__dirname, "..", file), "utf8"), { plugins: ["@babel/plugin-transform-modules-commonjs"] }).code; vm.runInNewContext(code, { module, exports: module.exports, require: key => mocks[key], Intl, Date, Math, ...globals }); return module.exports; }
-const utils = load("ride-utils.js"), { demoReducer: reduce, initialDemoState } = load("demo-state.js", { "./ride-utils": utils });
+const rules=require("../shared/operations.cjs");
+const utils = load("ride-utils.js", {"./shared/operations.cjs":rules}), { demoReducer: reduce, initialDemoState } = load("demo-state.js", { "./ride-utils": utils,"./shared/operations.cjs":rules });
 const draft = { pickup: utils.DEFAULT_PICKUP, destination: utils.DEFAULT_DESTINATION, route: { coordinates: [utils.DEFAULT_PICKUP, utils.DEFAULT_DESTINATION], distanceKm: 12, minutes: 25 } };
 function requested() { return reduce(initialDemoState(), { type: "REQUEST", id: "ride-1", draft }); }
 test("the complete solo presentation works across passenger, admin and driver", () => {
   let s = requested();
   s = reduce(s, { type: "ROLE", role: "admin" }); s = reduce(s, { type: "REVIEW", approved: true });
+  for(const document_type of rules.DOCUMENT_TYPES)s=reduce(s,{type:"OPERATION",operation:"DOCUMENT_REVIEW",payload:{driver_id:"demo-driver",document_type,approved:true}});
   s = reduce(s, { type: "ROLE", role: "driver" }); s = reduce(s, { type: "ONLINE", online: true });
   s = reduce(s, { type: "ACCEPT", id: "ride-1" }); assert.equal(s.rides[0].driver_id, "demo-driver");
-  s = reduce(s, { type: "STATUS", id: "ride-1", status: "in_progress" });
+  s=reduce(s,{type:"STATUS",id:"ride-1",status:"arrived"});
+  s = reduce(s, { type: "STATUS", id: "ride-1", status: "in_progress",pin:s.rides[0].pin });
   s = reduce(s, { type: "LOCATION", point: utils.DEFAULT_DESTINATION }); assert.equal(s.driverLocation.latitude, draft.destination.latitude);
   s = reduce(s, { type: "STATUS", id: "ride-1", status: "completed" });
   s = reduce(s, { type: "ROLE", role: "passenger" }); s = reduce(s, { type: "RATING", id: "ride-1", score: 5 });
-  assert.equal(s.rides[0].status, "completed"); assert.equal(s.rides[0].rating, 5); assert.equal(s.rides[0].estimated_fare, utils.estimateFare(12));
+  assert.equal(s.rides[0].status, "completed"); assert.equal(s.rides[0].rating, 5); assert.equal(s.rides[0].estimated_fare, utils.estimateFare(12,25));
   assert.equal(JSON.parse(JSON.stringify(s)).rides[0].rating, 5);
 });
 test("demo prevents duplicate requests and passengers cancelling a search works", () => {
   let s = requested(); assert.throws(() => reduce(s, { type: "REQUEST", id: "ride-2", draft }), /activo/);
-  s = reduce(s, { type: "STATUS", id: "ride-1", status: "cancelled" });
+  s = reduce(s, { type: "STATUS", id: "ride-1", status: "cancelled", reason:"Cambio de planes" });
   assert.equal(reduce(s, { type: "REQUEST", id: "ride-2", draft }).rides.length, 2);
 });
 test("unapproved and offline drivers cannot accept; passenger cannot self-approve or advance", () => {
   let s = requested(); assert.throws(() => reduce(s, { type: "REVIEW", approved: true }), /administración/);
   assert.throws(() => reduce(s, { type: "STATUS", id: "ride-1", status: "completed" }), /transición|cambió/);
-  s = reduce(s, { type: "ROLE", role: "driver" }); assert.throws(() => reduce(s, { type: "ONLINE", online: true }), /aprueba/);
+  s = reduce(s, { type: "ROLE", role: "driver" }); assert.throws(() => reduce(s, { type: "ONLINE", online: true }), /aprobar/);
   assert.throws(() => reduce(s, { type: "ACCEPT", id: "ride-1" }), /aprobado/);
 });
 test("reset clears only presentation state, invalid coordinates and same endpoints are rejected", () => {

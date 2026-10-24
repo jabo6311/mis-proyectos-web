@@ -1,7 +1,8 @@
+import rules from "../../shared/operations.cjs";
 export const ACTIVE = ["searching", "accepted", "in_progress"];
 export function validCoordinates(lat, lng) { return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180; }
 export function distance(a, b) { const r = Math.PI / 180, h = Math.sin((b.latitude - a.latitude) * r / 2) ** 2 + Math.cos(a.latitude * r) * Math.cos(b.latitude * r) * Math.sin((b.longitude - a.longitude) * r / 2) ** 2; return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h))); }
-export function fare(km) { return Math.round((4500 + km * 1800) / 500) * 500; }
+export function fare(km, minutes = 0, settings,category) { return rules.quote(km, minutes, settings,category); }
 const routes = new Map();
 export async function planRoute(a, b) {
   const key = JSON.stringify([a, b]); if (routes.has(key)) return routes.get(key);

@@ -1,0 +1,2 @@
+import 'dotenv/config';import {readFile} from 'node:fs/promises';import {decryptBackup} from '../src/backup.js';
+if(!process.argv[2])throw new Error('Pass a backup file');const b=decryptBackup(await readFile(process.argv[2]),process.env.BACKUP_ENCRYPTION_KEY);console.log(JSON.stringify({version:b.version,at:b.at,table_counts:Object.fromEntries(Object.entries(b.tables).map(([k,v])=>[k,v.length])),audit_events:b.operations.operations?.audit?.length||0},null,2));
