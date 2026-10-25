@@ -43,3 +43,13 @@ No se declara completado el MVP contractual mientras sigan esos pendientes.
 
 Se mantienen slug, identificadores Android/iOS y callback `vaialesk` por compatibilidad con
 instalaciones y Auth0 existentes; el nombre visible y el icono son VAI.
+
+## Experiencia ligera 1.3
+
+Casa/Trabajo, repetición de rutas con tarifa actual, preferencias y referencia de recogida, y ahorro de datos en Cuenta. Sin nuevas dependencias. Ver [decisiones, límites y mediciones](docs/lightweight-experience.md).
+
+## Versión y diagnóstico de conexión (1.3.2)
+
+La versión se muestra debajo del nombre VAI al abrir la aplicación y en la cabecera de cada rol. Android 1.3.2 corresponde a la compilación 6. La versión del API es independiente.
+
+En Entrar con mi cuenta y en el error de carga del espacio conectado, Comprobar conexión consulta /health/ready sin enviar credenciales. Distingue red inaccesible, dirección incorrecta y servidor/base de datos no listos. El servidor de prueba sigue en http://192.168.68.104:3000 y necesita estar encendido y accesible desde la red del teléfono; compartir Wi-Fi no garantiza acceso si hay aislamiento o VPN.

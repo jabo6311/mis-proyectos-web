@@ -1,3 +1,4 @@
+import experience from "../../shared/rider-experience.cjs";
 import {mountNotifications} from "./notifications.js";
 import { mountDocuments } from "./document-api.js";
 import { randomBytes } from "node:crypto";
@@ -16,7 +17,7 @@ export function createApp({ repository: repo, verifyToken, store, routePlanner =
   async function locked(key, action) { const previous = locks.get(key) || Promise.resolve(); const next = previous.catch(() => {}).then(action); locks.set(key, next); try { return await next; } finally { if (locks.get(key) === next) locks.delete(key); } }
   const extraDriver = p => ({ id: p.id, full_name: p.full_name, role: p.role, driver_status: p.driver_status, online: false, ...store.state.drivers[p.id], online: !!store.state.drivers[p.id]?.online && !rules.eligibility(store.state.operations, { ...p, ...store.state.drivers[p.id] }) });
   const extraRide = r => ({ ...r, ...store.state.rides[r.id], currency:store.state.rides[r.id]?.currency || (store.state.rides[r.id]?.pin?"DOP":"COP") });
-  const safeRide = (r,p) => { const result=extraRide(r); if(p.role!=="admin" && result.passenger_id!==p.id) { delete result.pin; delete result.passenger_phone; } return result; };
+  const safeRide = (r,p) => { const result=extraRide(r); if(p.role!=="admin" && result.passenger_id!==p.id) { delete result.pin; delete result.passenger_phone; } if (!["admin","dispatcher"].includes(p.role) && result.passenger_id!==p.id && result.driver_id!==p.id) { delete result.pickup_note; delete result.preferences; } return result; };
   async function authenticated(req, _res, next) {
     try {
       const token = req.get("authorization")?.match(/^Bearer (.+)$/)?.[1]; if (!token) throw fail(401, "Se requiere una sesión.");
@@ -36,8 +37,8 @@ export function createApp({ repository: repo, verifyToken, store, routePlanner =
   mountNotifications(app,{store,authenticated,wrap});
   mountDocuments(app,{repo,store,authenticated,wrap});
   mountOperations(app,{repo,store,authenticated,wrap,routePlanner});
-  app.get("/health", (_req, res) => res.json({ status: "ok", version: "1.2.0" }));
-  app.get("/health/ready",wrap(async(_req,res)=>{try{await repo.listProfiles();res.json({status:"ready",version:"1.2.0"});}catch{res.status(503).json({status:"unavailable"});}}));
+  app.get("/health", (_req, res) => res.json({ status: "ok", version: "1.3.0" }));
+  app.get("/health/ready",wrap(async(_req,res)=>{try{await repo.listProfiles();res.json({status:"ready",version:"1.3.0"});}catch{res.status(503).json({status:"unavailable"});}}));
   app.get("/api/me", authenticated, (req, res) => res.json({ profile: extraDriver(req.profile) }));
   app.get("/api/workspace", authenticated, wrap(async (req, res) => {
     const p=req.profile, isStaff=["admin","dispatcher"].includes(p.role), online=extraDriver(p).online;
@@ -84,6 +85,7 @@ export function createApp({ repository: repo, verifyToken, store, routePlanner =
     const p = req.profile, b = req.body || {};
     if (p.role !== "passenger") throw fail(403, "Pide un viaje desde el modo pasajero.");
     if (!text(b.pickup_address, 300) || !text(b.destination_address, 300) || !validCoordinates(b.pickup_lat, b.pickup_lng) || !validCoordinates(b.destination_lat, b.destination_lng) || b.payment_method !== "cash") throw fail(400, "Origen, destino o medio de pago inválidos.");
+    let details; try { details=experience.rideDetails(b); } catch(error) { throw fail(400,error.message); }
     const a = { latitude: b.pickup_lat, longitude: b.pickup_lng }, z = { latitude: b.destination_lat, longitude: b.destination_lng };
     if(rules.km(a,store.state.operations.settings.zone)>store.state.operations.settings.zone.radius_km)throw fail(400,"El origen está fuera de la zona piloto de Santo Domingo.");
     if(!store.state.operations.settings.categories.includes(b.category||"Estándar"))throw fail(400,"Categoría inválida.");
@@ -91,7 +93,7 @@ export function createApp({ repository: repo, verifyToken, store, routePlanner =
     if (await ownActive(p)) throw fail(409, "Ya tienes un viaje activo.");
     const route = await routePlanner(a, z);
     const ride = await repo.insertRide({ passenger_id: p.id, pickup_address: b.pickup_address.trim(), destination_address: b.destination_address.trim(), pickup_lat: a.latitude, pickup_lng: a.longitude, destination_lat: z.latitude, destination_lng: z.longitude, payment_method: "cash", status: "searching", estimated_fare: fare(route.distance_km, route.duration_minutes, store.state.operations.settings,b.category) });
-    store.state.rides[ride.id] = {...route,currency:"DOP",pin:String(1000+randomBytes(4).readUInt32BE()%9000),category:store.state.operations.settings.categories.includes(b.category)?b.category:"Estándar",commission_percent:store.state.operations.settings.commission_percent}; rules.audit(store.state.operations,p,"REQUEST",{ride_id:ride.id}); await store.save(); res.status(201).json({ ride: extraRide(ride) });
+    store.state.rides[ride.id] = {...route,...details,currency:"DOP",pin:String(1000+randomBytes(4).readUInt32BE()%9000),category:store.state.operations.settings.categories.includes(b.category)?b.category:"Estándar",commission_percent:store.state.operations.settings.commission_percent}; rules.audit(store.state.operations,p,"REQUEST",{ride_id:ride.id}); await store.save(); res.status(201).json({ ride: extraRide(ride) });
   })));
   app.get("/api/rides/:id", authenticated, wrap(async (req, res) => { const r = await repo.getRide(req.params.id); if (!r || (req.profile.role !== "admin" && r.passenger_id !== req.profile.id && r.driver_id !== req.profile.id)) throw fail(404, "No se encontró el viaje."); res.json({ ride: safeRide(r,req.profile) }); }));
   app.post("/api/rides/:id/accept", authenticated, wrap(async (req, res) => locked(`driver:${req.profile.id}`, async () => {

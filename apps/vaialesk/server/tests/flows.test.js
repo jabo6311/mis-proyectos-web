@@ -135,3 +135,22 @@ test('document photos stay private; only owner/admin can obtain a short-lived vi
 test('legacy trips retain COP, get a private PIN and never debit the new DOP wallet',async t=>{
  const {request:q,repo,store,app}=await setup(t);repo.rides.push({id:'legacy',...draft,passenger_id:'p',driver_id:'d',estimated_fare:22500,status:'accepted',created_at:new Date().toISOString()});store.state.rides.legacy={distance_km:10};await app.listeners('request')[0].locals.migrateLegacy();const r=(await q('passenger','GET','/api/workspace')).body.rides[0];assert.equal(r.currency,'COP');assert.equal(r.estimated_fare,22500);assert.match(r.pin,/^\d{4}$/);assert.equal((await q('driver','GET','/api/workspace')).body.rides[0].pin,undefined);await q('driver','PATCH','/api/rides/legacy/status',{status:'arrived'});await q('driver','PATCH','/api/rides/legacy/status',{status:'in_progress',pin:r.pin});assert.equal((await q('driver','PATCH','/api/rides/legacy/status',{status:'completed'})).status,200);assert.equal(rules.balance(store.state.operations,'d'),100000);assert.equal(store.state.rides.legacy.receipt.currency,'COP');
 });
+
+test('pickup notes/preferences persist privately until the assigned driver accepts',async t=>{
+ const {request:q}=await setup(t);
+ const details={pickup_note:'Puerta azul, chaqueta roja',preferences:['quiet','cool']};
+ const made=await q('passenger','POST','/api/rides',{...draft,...details});assert.equal(made.status,201);
+ const id=made.body.ride.id;assert.equal(made.body.ride.pickup_note,details.pickup_note);
+ await q('driver','POST','/api/driver/availability',{online:true});
+ const available=await q('driver','GET','/api/rides/available');assert.equal(available.body.rides[0].pickup_note,undefined);assert.equal(available.body.rides[0].preferences,undefined);
+ const before=await q('driver','GET','/api/workspace');assert.equal(before.body.rides[0].pickup_note,undefined);
+ assert.equal((await q('driver','POST',`/api/rides/${id}/accept`)).status,200);
+ const own=(await q('driver','GET','/api/workspace')).body.rides[0];assert.equal(own.pickup_note,details.pickup_note);assert.deepEqual(own.preferences,details.preferences);assert.equal(own.pin,undefined);
+ assert.equal((await q('driver2','GET',`/api/rides/${id}`)).status,404);
+ assert.equal((await q('admin','GET','/api/workspace')).body.rides[0].pickup_note,details.pickup_note);
+});
+test('invalid rider details are rejected before a trip is inserted',async t=>{
+ const {request:q,repo}=await setup(t);
+ for(const details of [{pickup_note:'a'.repeat(161)},{preferences:['unknown']},{pickup_note:'line\nbreak'},{preferences:'quiet'}]) assert.equal((await q('passenger','POST','/api/rides',{...draft,...details})).status,400);
+ assert.equal(repo.rides.length,0);
+});

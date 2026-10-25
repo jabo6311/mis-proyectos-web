@@ -48,3 +48,24 @@ export async function requestApi({
     clearTimeout(timer);
   }
 }
+
+// Public readiness check: no Auth0 credentials, tokens or automatic login retry.
+export function apiDescription(apiUrl) {
+  try { return new URL(apiUrl).origin; } catch { return "Servidor sin configurar"; }
+}
+export async function checkApi({ apiUrl, fetchImpl = fetch, timeoutMs = 8000 }) {
+  let url;
+  try { url = new URL(apiUrl); } catch { throw new Error("Esta instalación no tiene un servidor válido configurado."); }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error("La dirección del servidor no es válida.");
+  const controller = new AbortController(); let timer;
+  const deadline = new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error("El servidor no respondió. Comprueba que el computador esté encendido y abre la dirección mostrada seguida de /health/ready desde el navegador del teléfono."));},timeoutMs);});
+  const request = async()=>{
+    let response;
+    try { response=await fetchImpl(`${apiUrl.replace(/\/$/,"")}/health/ready`,{signal:controller.signal}); }
+    catch { throw new Error("El teléfono no pudo alcanzar el servidor. Prueba la dirección mostrada seguida de /health/ready en su navegador. Si tampoco abre, revisa la red de invitados, VPN y acceso del computador desde la Wi-Fi."); }
+    let body;try {body=await response.json();}catch {throw new Error("La dirección respondió, pero no corresponde a un API de VAI válido.");}
+    if(!response.ok || body?.status!=="ready")throw new Error("El servidor respondió, pero todavía no está listo. Revisa su conexión con la base de datos.");
+    return {version:typeof body.version==="string"?body.version.slice(0,30):null};
+  };
+  try{return await Promise.race([request(),deadline]);}finally{clearTimeout(timer);}
+}
