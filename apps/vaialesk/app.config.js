@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "VAI",
     slug: "vaialesk",
-    version: "1.3.0",
+    version: "1.3.1",
     scheme: "vaialesk",
     orientation: "portrait",
     userInterfaceStyle: "light",
@@ -36,7 +36,7 @@ export default {
     },
     android: {
       package: "com.vaialesk.mobile",
-      versionCode: 4
+      versionCode: 5
     },
     extra: {
       eas: {
