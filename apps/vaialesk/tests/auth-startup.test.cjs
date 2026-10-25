@@ -25,7 +25,7 @@ function load(file, mocks = {}) {
       if (name.startsWith("@babel/runtime/")) return require(name);
       throw new Error(`Unexpected native import: ${name}`);
     },
-    setTimeout, clearTimeout, AbortController, fetch, process: { env: {
+    setTimeout, clearTimeout, AbortController, URL, fetch, process: { env: {
       EXPO_PUBLIC_AUTH0_DOMAIN: "example.auth0.com",
       EXPO_PUBLIC_AUTH0_CLIENT_ID: "test-client",
       EXPO_PUBLIC_AUTH0_AUDIENCE: "https://api.example.com",
@@ -112,4 +112,20 @@ test("API authentication errors remain visible", async () => {
   await assert.rejects(requestApi({ ...defaults, fetchImpl: async () => ({
     ok: false, status: 401, json: async () => ({ error: "Sesión inválida o vencida." })
   }) }), /Sesión inválida/);
+});
+
+const { checkApi, apiDescription } = load("api-request.js");
+test("readiness diagnosis sends no credentials and confirms the expected server", async () => {
+  let seen;
+  const result=await checkApi({apiUrl:"http://192.168.68.104:3000/",fetchImpl:async(url,options)=>{seen={url,options};return {ok:true,json:async()=>({status:"ready",version:"1.3.0"})};}});
+  assert.equal(seen.url,"http://192.168.68.104:3000/health/ready");assert.equal(seen.options.headers,undefined);assert.equal(result.version,"1.3.0");
+});
+test("diagnosis distinguishes unreachable, wrong service and unavailable database", async () => {
+  await assert.rejects(checkApi({apiUrl:"https://api.example.com",fetchImpl:async()=>{throw Error("offline");}}),/no pudo alcanzar/);
+  await assert.rejects(checkApi({apiUrl:"https://api.example.com",fetchImpl:async()=>({ok:true,json:async()=>{throw Error("HTML");}})}),/no corresponde/);
+  await assert.rejects(checkApi({apiUrl:"https://api.example.com",fetchImpl:async()=>({ok:false,json:async()=>({status:"unavailable"})})}),/no está listo/);
+});
+test("diagnosis rejects secret-bearing or missing URLs and bounds stalled JSON parsing", async () => {
+  for(const apiUrl of [undefined,"invalid","https://user:secret@example.com","https://example.com?token=secret"]){await assert.rejects(checkApi({apiUrl,fetchImpl:async()=>{throw Error("must not fetch");}}),/válid|configurado/);}
+  await assert.rejects(checkApi({apiUrl:"https://api.example.com",timeoutMs:10,fetchImpl:async()=>({ok:true,json:()=>new Promise(()=>{})})}),/no respondió/);
 });
