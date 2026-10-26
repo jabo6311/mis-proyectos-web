@@ -7,7 +7,7 @@ implementación OAuth propia. Su plan gratuito tiene cuotas y condiciones, no us
 
 ## Estado de entrega
 
-El código y las exportaciones Android/web están preparados. En el proyecto actual,
+El código y las exportaciones Android/web están preparados. El 26 de octubre de 2026 se aplicó al proyecto remoto la migración `20261026161219_supabase_social_auth.sql`. Se verificó por conteos y checksum que permanecen intactos los dos perfiles y el viaje existentes; la vinculación de identidades sociales sigue pendiente del primer acceso verificado. En el proyecto actual,
 Google, Azure/Microsoft y Apple estaban desactivados al comprobar `/auth/v1/settings`.
 Los botones consultan esta configuración al entrar y permiten actualizarla. Una opción
 pendiente no abre un navegador que termine en un error. La demo sigue funcionando.
@@ -48,7 +48,7 @@ El cliente sólo lleva URL y clave pública anon/publishable. El servidor conser
 ## Migración sin borrar viajes
 
 Hacer un respaldo de SQL, JSON operativo y documentos privados antes del cambio.
-Aplicar `supabase/migrations/20261026000000_supabase_social_auth.sql` en SQL Editor.
+La migración `supabase/migrations/20261026161219_supabase_social_auth.sql` ya está aplicada en el proyecto actual y registrada por Supabase. Para otro entorno, aplicarla antes del API 1.4. No volver a ejecutar migraciones históricas de Auth0 indiscriminadamente sobre el entorno actualizado.
 Agrega `profiles.supabase_user_id` con UUID de Auth y unicidad; conserva `profiles.id`,
 `auth0_sub` histórico, roles, conductores, viajes y las referencias del archivo operativo.
 Las políticas RLS pasan a la identidad Supabase. La columna histórica no autentica usuarios.
