@@ -8,7 +8,7 @@ implementación OAuth propia. Su plan gratuito tiene cuotas y condiciones, no us
 ## Estado de entrega
 
 El código y las exportaciones Android/web están preparados. El 26 de octubre de 2026 se aplicó al proyecto remoto la migración `20261026161219_supabase_social_auth.sql`. Se verificó por conteos y checksum que permanecen intactos los dos perfiles y el viaje existentes; la vinculación de identidades sociales sigue pendiente del primer acceso verificado. En el proyecto actual,
-Google, Azure/Microsoft y Apple estaban desactivados al comprobar `/auth/v1/settings`.
+Google ya está habilitado con un cliente OAuth propio de VAI y verificado en `/auth/v1/settings`. Su audiencia sigue restringida a la organización hasta autorizar las pruebas externas. Azure/Microsoft y Apple siguen desactivados. Los retornos a la aplicación y la prueba de sesión real siguen pendientes.
 Los botones consultan esta configuración al entrar y permiten actualizarla. Una opción
 pendiente no abre un navegador que termine en un error. La demo sigue funcionando.
 Los proveedores requieren credenciales propias: las credenciales de desarrollo compartidas
@@ -17,7 +17,7 @@ La disponibilidad del botón confirma configuración habilitada, no sustituye la
 
 No hay servidor HTTPS público publicado. La configuración de prueba conserva
 `http://192.168.68.104:3000`; no funciona desde otra red. No desactivar Proton VPN.
-Para usar DigitalOcean hay que publicar el API, aplicar la migración y volver a compilar
+Para usar DigitalOcean hay que publicar el API con el esquema ya migrado y volver a compilar
 con su dirección HTTPS. El APK 1.3.2 no es compatible con el API 1.4: aún usa tokens Auth0.
 
 ## Configurar el proyecto Supabase
@@ -97,7 +97,7 @@ caducidad, UUID, rol authenticated y proveedor social permitido; ignora user_met
 El cierre de sesión revoca el refresh token local. Un access token emitido puede seguir
 siendo válido hasta su vencimiento: configurar una duración razonable en Supabase.
 
-## Prueba de aceptación real, pendiente de credenciales
+## Prueba de aceptación real, pendiente de completar configuración
 
 1. Abrir VAI y comprobar 1.4.0 · compilación 7. Probar los cuatro roles de demo.
 2. Configurar proveedor, volver a actualizar opciones. Cancelar el navegador: debe poder reintentar.
