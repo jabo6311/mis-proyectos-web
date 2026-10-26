@@ -7,13 +7,11 @@ implementación OAuth propia. Su plan gratuito tiene cuotas y condiciones, no us
 
 ## Estado de entrega
 
-El código y las exportaciones Android/web están preparados. El 26 de octubre de 2026 se aplicó al proyecto remoto la migración `20261026161219_supabase_social_auth.sql`. Se verificó por conteos y checksum que permanecen intactos los dos perfiles y el viaje existentes; la vinculación de identidades sociales sigue pendiente del primer acceso verificado. En el proyecto actual,
-Google ya está habilitado con un cliente OAuth propio de VAI y verificado en `/auth/v1/settings`. Su audiencia sigue restringida a la organización hasta autorizar las pruebas externas. Azure/Microsoft y Apple siguen desactivados. Los retornos a la aplicación y la prueba de sesión real siguen pendientes.
-Los botones consultan esta configuración al entrar y permiten actualizarla. Una opción
-pendiente no abre un navegador que termine en un error. La demo sigue funcionando.
-Los proveedores requieren credenciales propias: las credenciales de desarrollo compartidas
-por Auth0 no se pueden trasladar como si fueran de VAI. Apple Developer aún no está contratado.
-La disponibilidad del botón confirma configuración habilitada, no sustituye la prueba real.
+El código y las exportaciones Android/web están preparados. El 26 de octubre de 2026 se aplicó la migración `20261026161219_supabase_social_auth.sql`. Conteos y checksum confirmaron que se conservan los dos perfiles y el viaje existentes.
+
+Google está habilitado con el cliente OAuth propio «VAI - Supabase Auth». Se configuró audiencia External/Testing con dos probadores autorizados; los correos no se incluyen en el repositorio. Supabase tiene los retornos exactos `vaialesk://auth/callback`, `http://127.0.0.1:8788/` y `http://localhost:8788/`. Se verificó un acceso real en web: consentimiento básico, retorno a VAI, sesión recuperada al recargar y perfil de conductor con mapa cargado contra el API 1.4 en localhost:3001. El API reportó `ready`, versión 1.4.0 y autenticación Supabase. Se enlazó un perfil anterior usando coincidencia exacta del identificador Google del proveedor, sin usar correo ni nombre; conserva el UUID, rol e historial. El segundo perfil sigue pendiente de acceso verificado.
+
+La prueba Android requiere instalar la nueva APK. El propietario autorizó instalar las herramientas oficiales y aceptar la licencia SDK para compilar localmente; la compilación todavía está en curso/preparación y no se considera una APK entregada. Microsoft continúa pendiente del registro propio en Entra y Apple requiere Apple Developer, que aún no está contratado. Los botones consultan `/auth/v1/settings` y muestran las opciones pendientes sin abrir flujos fallidos. La demo sigue funcionando. Las credenciales compartidas de desarrollo de Auth0 no se pueden trasladar como si fueran de VAI.
 
 No hay servidor HTTPS público publicado. La configuración de prueba conserva
 `http://192.168.68.104:3000`; no funciona desde otra red. No desactivar Proton VPN.
