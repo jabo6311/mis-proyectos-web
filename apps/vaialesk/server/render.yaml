@@ -6,7 +6,7 @@ services:
     runtime: docker
     rootDir: apps/vaialesk
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /health
+    healthCheckPath: /health/ready
     envVars:
       - key: NODE_ENV
         value: production
@@ -20,11 +20,7 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: AUTH0_DOMAIN
-        sync: false
-      - key: AUTH0_AUDIENCE
-        sync: false
-      - key: ADMIN_AUTH0_SUBS
+      - key: ADMIN_SUPABASE_USER_IDS
         sync: false
       - key: AUDIT_SIGNING_KEY
         generateValue: true

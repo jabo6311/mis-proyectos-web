@@ -49,7 +49,7 @@ export async function requestApi({
   }
 }
 
-// Public readiness check: no Auth0 credentials, tokens or automatic login retry.
+// Public readiness check: no session credentials, tokens or automatic login retry.
 export function apiDescription(apiUrl) {
   try { return new URL(apiUrl).origin; } catch { return "Servidor sin configurar"; }
 }

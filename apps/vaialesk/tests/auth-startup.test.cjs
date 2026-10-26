@@ -17,18 +17,16 @@ function load(file, mocks = {}) {
     require: (name) => {
       if (name in mocks) return mocks[name];
       if (name === "expo/virtual/env") return { env: {
-        EXPO_PUBLIC_AUTH0_DOMAIN: "example.auth0.com",
-        EXPO_PUBLIC_AUTH0_CLIENT_ID: "test-client",
-        EXPO_PUBLIC_AUTH0_AUDIENCE: "https://api.example.com",
+        EXPO_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: "public-test-key-for-testing",
         EXPO_PUBLIC_API_URL: "https://api.example.com"
       } };
       if (name.startsWith("@babel/runtime/")) return require(name);
       throw new Error(`Unexpected native import: ${name}`);
     },
     setTimeout, clearTimeout, AbortController, URL, fetch, process: { env: {
-      EXPO_PUBLIC_AUTH0_DOMAIN: "example.auth0.com",
-      EXPO_PUBLIC_AUTH0_CLIENT_ID: "test-client",
-      EXPO_PUBLIC_AUTH0_AUDIENCE: "https://api.example.com",
+      EXPO_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: "public-test-key-for-testing",
       EXPO_PUBLIC_API_URL: "https://api.example.com"
     } }
   });
@@ -46,7 +44,7 @@ const rn = new Proxy({ StyleSheet: { create: (s) => s }, Platform: { OS: "androi
   get: (target, key) => target[key] || key
 });
 
-test("Expo Go shows installation guidance without importing Auth0 or NativeApp", () => {
+test("Expo Go shows installation guidance without importing native OAuth modules", () => {
   const { default: App } = load("App.js", {
     react,
     "react-native": rn,

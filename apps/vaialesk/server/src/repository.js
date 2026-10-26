@@ -3,9 +3,10 @@ export function createRepository(db) {
   let bucketReady;
   async function privateBucket(){ if(!bucketReady)bucketReady=(async()=>{const {data,error}=await db.storage.getBucket("vai-driver-documents");if(data){if(data.public)throw new Error("Document bucket must be private");return;}if(error&&error.statusCode!=="404"&&error.statusCode!==404&&!/not found/i.test(error.message))throw error;const created=await db.storage.createBucket("vai-driver-documents",{public:false,fileSizeLimit:2097152,allowedMimeTypes:["image/jpeg"]});if(created.error)throw created.error;})();return bucketReady; }
   return {
+    checkReady: () => result(db.from("profiles").select("id,supabase_user_id").limit(1)),
     uploadDocument:async(path,data)=>{await privateBucket();const r=await db.storage.from("vai-driver-documents").upload(path,data,{contentType:"image/jpeg",upsert:false});if(r.error)throw r.error;},
     signDocument:async path=>{await privateBucket();const r=await db.storage.from("vai-driver-documents").createSignedUrl(path,60);if(r.error)throw r.error;return r.data.signedUrl;},
-    getProfile: sub => result(db.from("profiles").select("*").eq("auth0_sub", sub).maybeSingle()),
+    getProfile: sub => result(db.from("profiles").select("*").eq("supabase_user_id", sub).maybeSingle()),
     getProfileById: id => result(db.from("profiles").select("*").eq("id", id).maybeSingle()),
     createProfile: data => result(db.from("profiles").insert(data).select().single()),
     updateProfile: (id, data) => result(db.from("profiles").update(data).eq("id", id).select().single()),

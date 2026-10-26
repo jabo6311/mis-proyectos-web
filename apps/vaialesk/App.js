@@ -9,8 +9,8 @@ export default function App() {
         <Text style={styles.brand}>VAI</Text>
         <Text style={styles.title}>Instala el APK de VAI</Text>
         <Text style={styles.body}>
-          Expo Go no incluye el módulo nativo de Auth0 y no puede completar
-          el inicio de sesión con Google o Microsoft.
+          Para regresar correctamente desde Google, Microsoft o Apple,
+          utiliza la aplicación instalada de VAI.
         </Text>
         <Text style={styles.body}>
           Instala el APK de prueba generado con el perfil preview y abre
@@ -20,8 +20,7 @@ export default function App() {
     );
   }
 
-  // Auth0 calls TurboModuleRegistry.getEnforcing during import. Import it only
-  // after checking Expo Go so the explanation above can actually be rendered.
+  // OAuth needs the application's registered callback, unavailable in Expo Go.
   const NativeApp = require("./NativeApp").default;
   return <NativeApp />;
 }
