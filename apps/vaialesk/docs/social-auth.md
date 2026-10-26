@@ -11,10 +11,10 @@ El código y las exportaciones Android/web están preparados. El 26 de octubre d
 
 Google está habilitado con el cliente OAuth propio «VAI - Supabase Auth». Se configuró audiencia External/Testing con dos probadores autorizados; los correos no se incluyen en el repositorio. Supabase tiene los retornos exactos `vaialesk://auth/callback`, `http://127.0.0.1:8788/` y `http://localhost:8788/`. Se verificó un acceso real en web: consentimiento básico, retorno a VAI, sesión recuperada al recargar y perfil de conductor con mapa cargado contra el API 1.4 en localhost:3001. El API reportó `ready`, versión 1.4.0 y autenticación Supabase. Se enlazó un perfil anterior usando coincidencia exacta del identificador Google del proveedor, sin usar correo ni nombre; conserva el UUID, rol e historial. El segundo perfil sigue pendiente de acceso verificado.
 
-La prueba Android requiere instalar la nueva APK. El propietario autorizó instalar las herramientas oficiales y aceptar la licencia SDK para compilar localmente; la compilación todavía está en curso/preparación y no se considera una APK entregada. Microsoft continúa pendiente del registro propio en Entra y Apple requiere Apple Developer, que aún no está contratado. Los botones consultan `/auth/v1/settings` y muestran las opciones pendientes sin abrir flujos fallidos. La demo sigue funcionando. Las credenciales compartidas de desarrollo de Auth0 no se pueden trasladar como si fueran de VAI.
+La APK Android 1.4.0 (7) se compiló localmente con las herramientas oficiales y la licencia SDK autorizadas por el propietario. Se verificaron la firma APK v2, el paquete `com.vaialesk.mobile`, la versión y el esquema de retorno `vaialesk`; el manifiesto no contiene actividad Auth0. Archivo: `VAI-1.4.0-android.apk`, aproximadamente 73,1 MB para las arquitecturas incluidas. La prueba de inicio de sesión y regreso en teléfono aún requiere instalarla. Microsoft continúa pendiente del registro propio en Entra y Apple requiere Apple Developer, que aún no está contratado. Los botones consultan `/auth/v1/settings` y muestran las opciones pendientes sin abrir flujos fallidos. La demo sigue funcionando. Las credenciales compartidas de desarrollo de Auth0 no se pueden trasladar como si fueran de VAI.
 
-No hay servidor HTTPS público publicado. La configuración de prueba conserva
-`http://192.168.68.104:3000`; no funciona desde otra red. No desactivar Proton VPN.
+No hay servidor HTTPS público publicado. La configuración de prueba usa
+`http://20.12.0.165:3000`; no permite operación desde otra red. El API local actualizado respondió `ready` con versión 1.4.0 y auth Supabase en esta dirección. El teléfono todavía debe poder alcanzar el Mac; una VPN o aislamiento Wi-Fi puede impedirlo. No desactivar Proton VPN.
 Para usar DigitalOcean hay que publicar el API con el esquema ya migrado y volver a compilar
 con su dirección HTTPS. El APK 1.3.2 no es compatible con el API 1.4: aún usa tokens Auth0.
 
@@ -42,6 +42,8 @@ El cliente sólo lleva URL y clave pública anon/publishable. El servidor conser
    Esta entrega usa OAuth en navegador para Android y web. La prueba/publicación de iOS
    y una experiencia nativa Apple en iOS requieren una entrega adicional específica.
 6. Volver a VAI → Entrar con mi cuenta → Actualizar opciones de acceso.
+
+En la prueba Google, el consentimiento puede mostrar `tghmeiipujlsjzaobkbg.supabase.co`: es el dominio del proyecto Supabase que recibe la respuesta de Google. Los permisos verificados son nombre, foto de perfil y correo. Las pruebas externas sólo incluyen las dos cuentas autorizadas; agregar otros probadores exige registrarlos en Google Cloud.
 
 ## Migración sin borrar viajes
 
@@ -119,3 +121,7 @@ Las pruebas con JWT firmado y SDK real no sustituyen una sesión real con cada p
 - https://supabase.com/docs/guides/auth/sessions/pkce-flow
 - https://supabase.com/pricing
 - https://docs.expo.dev/build-reference/local-builds/
+
+## Entrega Android verificada
+
+Instalar la APK 1.4.0 como actualización de VAI. Abrir primero la presentación para comprobar Usuario, Conductor, Administración y Despacho con datos ficticios. Después probar Google con una cuenta autorizada y comprobar el regreso a VAI. La firma y los metadatos del archivo están comprobados; la instalación y el flujo nativo en un teléfono físico siguen pendientes. Microsoft espera completar la verificación de la cuenta en Azure; Apple sigue pendiente de Apple Developer. La operación desde República Dominicana requiere publicar API y panel por HTTPS y generar una compilación con la URL pública. No enviar secretos ni códigos de verificación por el chat.
