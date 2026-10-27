@@ -115,10 +115,11 @@ test("API authentication errors remain visible", async () => {
 const { checkApi, apiDescription } = load("api-request.js");
 test("readiness diagnosis sends no credentials and confirms the expected server", async () => {
   let seen;
-  const result=await checkApi({apiUrl:"http://192.168.68.104:3000/",fetchImpl:async(url,options)=>{seen={url,options};return {ok:true,json:async()=>({status:"ready",version:"1.3.0"})};}});
-  assert.equal(seen.url,"http://192.168.68.104:3000/health/ready");assert.equal(seen.options.headers,undefined);assert.equal(result.version,"1.3.0");
+  const result=await checkApi({apiUrl:"http://192.168.68.104:3000/",fetchImpl:async(url,options)=>{seen={url,options};return {ok:true,json:async()=>({status:"ready",version:"1.4.0",auth:"supabase"})};}});
+  assert.equal(seen.url,"http://192.168.68.104:3000/health/ready");assert.equal(seen.options.headers,undefined);assert.equal(result.version,"1.4.0");
 });
 test("diagnosis distinguishes unreachable, wrong service and unavailable database", async () => {
+  await assert.rejects(checkApi({apiUrl:"https://api.example.com",fetchImpl:async()=>({ok:true,json:async()=>({status:"ready",version:"1.3.2",auth:"auth0"})})}),/acceso anterior/);
   await assert.rejects(checkApi({apiUrl:"https://api.example.com",fetchImpl:async()=>{throw Error("offline");}}),/no pudo alcanzar/);
   await assert.rejects(checkApi({apiUrl:"https://api.example.com",fetchImpl:async()=>({ok:true,json:async()=>{throw Error("HTML");}})}),/no corresponde/);
   await assert.rejects(checkApi({apiUrl:"https://api.example.com",fetchImpl:async()=>({ok:false,json:async()=>({status:"unavailable"})})}),/no está listo/);

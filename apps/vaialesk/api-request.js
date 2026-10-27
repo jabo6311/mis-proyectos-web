@@ -26,7 +26,7 @@ export async function requestApi({
         }
       });
     } catch {
-      throw new Error("No se pudo conectar al API. Comprueba que esté encendido y que la URL sea accesible desde el teléfono; localhost apunta al propio teléfono.");
+      throw new Error("No se pudo conectar al API. Revisa la dirección en «Conexión con el servidor». Si el computador cambió de red, usa «Cambiar servidor».");
     }
     let body;
     try {
@@ -65,6 +65,7 @@ export async function checkApi({ apiUrl, fetchImpl = fetch, timeoutMs = 8000 }) 
     catch { throw new Error("El teléfono no pudo alcanzar el servidor. Prueba la dirección mostrada seguida de /health/ready en su navegador. Si tampoco abre, revisa la red de invitados, VPN y acceso del computador desde la Wi-Fi."); }
     let body;try {body=await response.json();}catch {throw new Error("La dirección respondió, pero no corresponde a un API de VAI válido.");}
     if(!response.ok || body?.status!=="ready")throw new Error("El servidor respondió, pero todavía no está listo. Revisa su conexión con la base de datos.");
+    if(body.auth!=="supabase")throw new Error("Ese servidor usa un acceso anterior. Necesitas el API de VAI actualizado con Supabase.");
     return {version:typeof body.version==="string"?body.version.slice(0,30):null};
   };
   try{return await Promise.race([request(),deadline]);}finally{clearTimeout(timer);}

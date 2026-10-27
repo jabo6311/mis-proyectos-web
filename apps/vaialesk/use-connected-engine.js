@@ -2,28 +2,31 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import polling from "./shared/polling.cjs";
 import { requestApi } from "./api-request";
-const apiUrl = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
+import useApiEndpoint from "./use-api-endpoint";
 export default function useConnectedEngine(getCredentials) {
+  const {url:apiUrl,ready:apiReady}=useApiEndpoint();
   const [state, setState] = useState(null), [error, setError] = useState(""), [busy, setBusy] = useState(false);
   const fetching = useRef(false), mutating = useRef(false), mounted = useRef(true), generation = useRef(0);
   const latest = useRef(null), saver = useRef(false), poller = useRef(null); latest.current = state;
   const setDataSaver = useCallback(value => { saver.current = !!value; poller.current?.reschedule(); }, []);
-  const request = useCallback((path, options = {}) => requestApi({ apiUrl, path, getCredentials, options }), [getCredentials]);
+  const request = useCallback((path, options = {}) => requestApi({ apiUrl, path, getCredentials, options }), [getCredentials,apiUrl]);
   const refresh = useCallback(async () => {
-    if (fetching.current || mutating.current) return;
+    if (!apiReady || fetching.current || mutating.current) return;
     fetching.current = true;
     const version = generation.current;
     try { const data = await request("/api/workspace"); if (mounted.current && version === generation.current) { latest.current = data; setState(data); setError(""); } return true; }
     catch (e) { if (mounted.current && version === generation.current) setError(e.message); return false; }
     finally { fetching.current = false; }
-  }, [request]);
+  }, [request,apiReady]);
   useEffect(() => {
     mounted.current = true;
+    latest.current=null; setState(null); setError("");
+    if(!apiReady)return()=>{mounted.current=false;generation.current++;};
     const worker = polling.createPoller({ refresh, delay: failures => polling.pollDelay(latest.current, saver.current, failures) }); poller.current = worker;
     if (!AppState.currentState || AppState.currentState === "active") worker.start();
     const subscription = AppState.addEventListener("change", value => value === "active" ? worker.start() : worker.stop());
-    return () => { mounted.current = false; worker.stop(); subscription.remove(); };
-  }, [refresh]);
+    return () => { mounted.current = false; generation.current++; worker.stop(); subscription.remove(); };
+  }, [refresh,apiReady]);
   async function action(type, payload = {}) {
     if (mutating.current) return false;
     mutating.current = true; setBusy(true); setError(""); generation.current++;
