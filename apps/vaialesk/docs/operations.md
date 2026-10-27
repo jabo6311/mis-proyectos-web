@@ -1,3 +1,5 @@
+> Actualización 1.4.0: el acceso Auth0 descrito históricamente en este documento fue sustituido por Supabase Auth. La configuración vigente está en [social-auth.md](social-auth.md).
+
 # Operar VAI en pruebas
 
 ## Presentación en un teléfono

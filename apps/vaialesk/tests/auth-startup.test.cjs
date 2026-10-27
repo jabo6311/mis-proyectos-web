@@ -17,18 +17,16 @@ function load(file, mocks = {}) {
     require: (name) => {
       if (name in mocks) return mocks[name];
       if (name === "expo/virtual/env") return { env: {
-        EXPO_PUBLIC_AUTH0_DOMAIN: "example.auth0.com",
-        EXPO_PUBLIC_AUTH0_CLIENT_ID: "test-client",
-        EXPO_PUBLIC_AUTH0_AUDIENCE: "https://api.example.com",
+        EXPO_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: "public-test-key-for-testing",
         EXPO_PUBLIC_API_URL: "https://api.example.com"
       } };
       if (name.startsWith("@babel/runtime/")) return require(name);
       throw new Error(`Unexpected native import: ${name}`);
     },
     setTimeout, clearTimeout, AbortController, URL, fetch, process: { env: {
-      EXPO_PUBLIC_AUTH0_DOMAIN: "example.auth0.com",
-      EXPO_PUBLIC_AUTH0_CLIENT_ID: "test-client",
-      EXPO_PUBLIC_AUTH0_AUDIENCE: "https://api.example.com",
+      EXPO_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: "public-test-key-for-testing",
       EXPO_PUBLIC_API_URL: "https://api.example.com"
     } }
   });
@@ -46,7 +44,7 @@ const rn = new Proxy({ StyleSheet: { create: (s) => s }, Platform: { OS: "androi
   get: (target, key) => target[key] || key
 });
 
-test("Expo Go shows installation guidance without importing Auth0 or NativeApp", () => {
+test("Expo Go shows installation guidance without importing native OAuth modules", () => {
   const { default: App } = load("App.js", {
     react,
     "react-native": rn,
@@ -117,10 +115,11 @@ test("API authentication errors remain visible", async () => {
 const { checkApi, apiDescription } = load("api-request.js");
 test("readiness diagnosis sends no credentials and confirms the expected server", async () => {
   let seen;
-  const result=await checkApi({apiUrl:"http://192.168.68.104:3000/",fetchImpl:async(url,options)=>{seen={url,options};return {ok:true,json:async()=>({status:"ready",version:"1.3.0"})};}});
-  assert.equal(seen.url,"http://192.168.68.104:3000/health/ready");assert.equal(seen.options.headers,undefined);assert.equal(result.version,"1.3.0");
+  const result=await checkApi({apiUrl:"http://192.168.68.104:3000/",fetchImpl:async(url,options)=>{seen={url,options};return {ok:true,json:async()=>({status:"ready",version:"1.4.0",auth:"supabase"})};}});
+  assert.equal(seen.url,"http://192.168.68.104:3000/health/ready");assert.equal(seen.options.headers,undefined);assert.equal(result.version,"1.4.0");
 });
 test("diagnosis distinguishes unreachable, wrong service and unavailable database", async () => {
+  await assert.rejects(checkApi({apiUrl:"https://api.example.com",fetchImpl:async()=>({ok:true,json:async()=>({status:"ready",version:"1.3.2",auth:"auth0"})})}),/acceso anterior/);
   await assert.rejects(checkApi({apiUrl:"https://api.example.com",fetchImpl:async()=>{throw Error("offline");}}),/no pudo alcanzar/);
   await assert.rejects(checkApi({apiUrl:"https://api.example.com",fetchImpl:async()=>({ok:true,json:async()=>{throw Error("HTML");}})}),/no corresponde/);
   await assert.rejects(checkApi({apiUrl:"https://api.example.com",fetchImpl:async()=>({ok:false,json:async()=>({status:"unavailable"})})}),/no está listo/);

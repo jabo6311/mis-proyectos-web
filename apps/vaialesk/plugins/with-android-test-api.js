@@ -5,17 +5,15 @@ const path = require("node:path");
 function getTestApiNetworkConfig(apiUrl, buildProfile) {
   if (!["preview", "development"].includes(buildProfile)) return null;
   let url;
-  try { url = new URL(apiUrl); } catch { return null; }
-  if (url.protocol !== "http:") return null;
-  const host = url.hostname.replace(/[<>&"']/g, "");
+  try { url = new URL(require("../api-endpoint-store.cjs").normalizeApiUrl(apiUrl, {allowLocalhost:true})); } catch { return null; }
+  // Android has no CIDR matching for a changing LAN address. Only test builds
+  // allow cleartext at platform level; the endpoint store rejects public HTTP.
   return `<?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-  <base-config cleartextTrafficPermitted="false" />
-  <domain-config cleartextTrafficPermitted="true">
-    <domain includeSubdomains="false">${host}</domain>
-  </domain-config>
+  <base-config cleartextTrafficPermitted="true" />
 </network-security-config>
 `;
+
 }
 
 module.exports = function withAndroidTestApi(config, options = {}) {

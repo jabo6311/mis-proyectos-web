@@ -24,7 +24,8 @@ export function createApp({ repository: repo, verifyToken, store, routePlanner =
       let claims; try { claims = await verifyToken(token); } catch { throw fail(401, "Sesión inválida o vencida. Vuelve a iniciar sesión."); }
       if (typeof claims.sub !== "string" || !claims.sub) throw fail(401, "La sesión no tiene una identidad válida.");
       req.profile = await repo.getProfile(claims.sub);
-      if (!req.profile) { try { req.profile = await repo.createProfile({ auth0_sub: claims.sub, full_name: claims["https://vaialesk.app/name"] || claims.name || "Pasajero" }); } catch (error) { if (error.code !== "23505") throw error; req.profile = await repo.getProfile(claims.sub); } }
+      if (!req.profile) { try { req.profile = await repo.createProfile({ supabase_user_id: claims.sub, full_name: claims.name || "Pasajero" }); } catch (error) { if (error.code !== "23505") throw error; req.profile = await repo.getProfile(claims.sub); } }
+      if (!req.profile) throw fail(503, "No pudimos recuperar tu perfil. Reintenta en un momento.");
       if (adminSubjects.includes(claims.sub) && req.profile.role !== "admin") req.profile = await repo.updateProfile(req.profile.id, { role: "admin" });
       if(req.profile.role!=="admin" && store.state.operations.staff[req.profile.id]) req.profile={...req.profile,role:store.state.operations.staff[req.profile.id]};
       next();
@@ -37,8 +38,8 @@ export function createApp({ repository: repo, verifyToken, store, routePlanner =
   mountNotifications(app,{store,authenticated,wrap});
   mountDocuments(app,{repo,store,authenticated,wrap});
   mountOperations(app,{repo,store,authenticated,wrap,routePlanner});
-  app.get("/health", (_req, res) => res.json({ status: "ok", version: "1.3.0" }));
-  app.get("/health/ready",wrap(async(_req,res)=>{try{await repo.listProfiles();res.json({status:"ready",version:"1.3.0"});}catch{res.status(503).json({status:"unavailable"});}}));
+  app.get("/health", (_req, res) => res.json({ status: "ok", version: "1.4.0", auth: "supabase" }));
+  app.get("/health/ready",wrap(async(_req,res)=>{try{await repo.checkReady();res.json({status:"ready",version:"1.4.0",auth:"supabase"});}catch{res.status(503).json({status:"unavailable"});}}));
   app.get("/api/me", authenticated, (req, res) => res.json({ profile: extraDriver(req.profile) }));
   app.get("/api/workspace", authenticated, wrap(async (req, res) => {
     const p=req.profile, isStaff=["admin","dispatcher"].includes(p.role), online=extraDriver(p).online;

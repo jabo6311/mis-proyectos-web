@@ -9,13 +9,15 @@ import { createApp } from "../src/app.js";
 import { createLocalStore } from "../src/local-store.js";
 function memoryRepo() {
   const profiles = [
-    { id: "p", auth0_sub: "passenger", role: "passenger", full_name: "Pasajero", driver_status: "pending" },
-    { id: "d", auth0_sub: "driver", role: "driver", full_name: "Conductor", driver_status: "approved" },
-    { id: "d2", auth0_sub: "driver2", role: "driver", full_name: "Conductor 2", driver_status: "approved" },
-    { id: "a", auth0_sub: "admin", role: "admin", full_name: "Admin", driver_status: "pending" }
+    { id: "p", supabase_user_id: "passenger", role: "passenger", full_name: "Pasajero", driver_status: "pending" },
+    { id: "d", supabase_user_id: "driver", role: "driver", full_name: "Conductor", driver_status: "approved" },
+    { id: "d2", supabase_user_id: "driver2", role: "driver", full_name: "Conductor 2", driver_status: "approved" },
+    { id: "a", supabase_user_id: "admin", role: "admin", full_name: "Admin", driver_status: "pending" }
   ], rides = [], ratings = [];
   return { profiles, rides,
-    getProfile: async sub => profiles.find(p => p.auth0_sub === sub),
+    checkReady: async () => {},
+    createProfile: async data => { if (profiles.some(p => p.supabase_user_id === data.supabase_user_id)) throw Object.assign(new Error("duplicate"), {code:"23505"}); const p = { id: `new-${profiles.length}`, role: "passenger", driver_status: "pending", ...data }; profiles.push(p); return p; },
+    getProfile: async sub => profiles.find(p => p.supabase_user_id === sub),
     getProfileById: async id => profiles.find(p => p.id === id),
     updateProfile: async (id, patch) => Object.assign(profiles.find(p => p.id === id), patch),
     listProfiles: async () => profiles,
@@ -27,11 +29,11 @@ function memoryRepo() {
   };
 }
 const draft = { pickup_address: "Origen", destination_address: "Destino", pickup_lat: 18.4723, pickup_lng: -69.8843, destination_lat: 18.4837, destination_lng: -69.9397, payment_method: "cash" };
-async function setup(t) {
+async function setup(t, options = {}) {
   const repo = memoryRepo(), store = { state: { drivers: {}, rides: {} }, save: async () => {} };
   store.state.operations=rules.initialOperations();
   for(const d of ["d","d2","p"]){store.state.operations.documents[d]=Object.fromEntries(rules.DOCUMENT_TYPES.map(type=>[type,{reference:"TEST",expires:"2027-12-31",status:"approved"}]));store.state.operations.ledger.push({id:`test:${d}`,driver_id:d,amount_cents:100000,kind:"test"});}
-  const server = createApp({ repository: repo, store, verifyToken: async token => { if (!repo.profiles.some(p => p.auth0_sub === token)) throw new Error("invalid"); return { sub: token }; }, routePlanner: async () => ({ distance_km: 10, duration_minutes: 20, route_geometry: [] }) }).listen(0, "127.0.0.1");
+  const server = createApp({ repository: repo, store, verifyToken: options.verifyToken || (async token => { if (!repo.profiles.some(p => p.supabase_user_id === token)) throw new Error("invalid"); return { sub: token }; }), routePlanner: async () => ({ distance_km: 10, duration_minutes: 20, route_geometry: [] }) }).listen(0, "127.0.0.1");
   await once(server, "listening"); t.after(() => new Promise(resolve => server.close(resolve)));
   async function request(token, method, path, body) { const res = await fetch(`http://127.0.0.1:${server.address().port}${path}`, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) }); return { status: res.status, body: await res.json() }; }
   return { repo, store, request, app:server };
@@ -153,4 +155,17 @@ test('invalid rider details are rejected before a trip is inserted',async t=>{
  const {request:q,repo}=await setup(t);
  for(const details of [{pickup_note:'a'.repeat(161)},{preferences:['unknown']},{pickup_note:'line\nbreak'},{preferences:'quiet'}]) assert.equal((await q('passenger','POST','/api/rides',{...draft,...details})).status,400);
  assert.equal(repo.rides.length,0);
+});
+
+test('new social identities default to passenger despite a forged admin claim', async t => {
+ const {request:q,repo}=await setup(t,{verifyToken:async()=>({sub:'new-social',name:'Nueva cuenta',role:'admin',user_metadata:{role:'admin'}})});
+ const result=await q('token','GET','/api/me');assert.equal(result.status,200);assert.equal(result.body.profile.role,'passenger');assert.equal(result.body.profile.full_name,'Nueva cuenta');assert.equal(repo.profiles.at(-1).supabase_user_id,'new-social');assert.equal(repo.profiles.at(-1).auth0_sub,undefined);
+ assert.equal((await q('token','PATCH','/api/admin/drivers/d/approval',{approved:true})).status,403);
+});
+test('linked social identities keep the existing profile ID and trip history', async t => {
+ const {request:q,repo}=await setup(t);repo.profiles[0].auth0_sub='legacy-auth0-identity';repo.rides.push({id:'history',passenger_id:'p',driver_id:'d',status:'completed',created_at:new Date().toISOString()});
+ const result=await q('passenger','GET','/api/workspace');assert.equal(result.status,200);assert.equal(result.body.profile.id,'p');assert.equal(result.body.rides[0].id,'history');assert.equal(repo.profiles.length,4);
+});
+test('readiness reports authentication schema missing instead of claiming server ready', async t => {
+ const {request:q,repo}=await setup(t);assert.equal((await q(null,'GET','/health/ready')).body.auth,'supabase');repo.checkReady=async()=>{throw Error('missing column');};assert.equal((await q(null,'GET','/health/ready')).status,503);
 });

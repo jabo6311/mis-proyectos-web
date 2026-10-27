@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "VAI",
     slug: "vaialesk",
-    version: "1.3.2",
+    version: "1.4.2",
     scheme: "vaialesk",
     orientation: "portrait",
     userInterfaceStyle: "light",
@@ -20,15 +20,8 @@ export default {
         }
       ],
       "expo-status-bar",
-      [
-        "react-native-auth0",
-        {
-          domain:
-            process.env.EXPO_PUBLIC_AUTH0_DOMAIN ||
-            "vaialesk-auth0-not-configured.auth0.com",
-          customScheme: "vaialesk"
-        }
-      ]
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     ios: {
       bundleIdentifier: "com.vaialesk.mobile",
@@ -36,7 +29,7 @@ export default {
     },
     android: {
       package: "com.vaialesk.mobile",
-      versionCode: 6
+      versionCode: 9
     },
     extra: {
       eas: {

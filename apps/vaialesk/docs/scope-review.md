@@ -1,3 +1,5 @@
+> Actualización 1.4.0: el acceso Auth0 descrito históricamente en este documento fue sustituido por Supabase Auth. La configuración vigente está en [social-auth.md](social-auth.md).
+
 # VAI 1.2 - revisión de alcance del MVP
 
 Fecha: 24 de octubre de 2026. Base: secciones 3-10 y 16 de la propuesta entregada por el cliente.
